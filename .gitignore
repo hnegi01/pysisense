@@ -1,0 +1,17 @@
+# Ignore environment files
+.env
+pysisense_venv/
+
+# Ignore system files
+__pycache__/
+.DS_Store
+pysisense.egg-info/
+
+# Ignore CSV files
+*.csv
+
+# Ignore log files
+logs/*.log
+
+# # Ignore YAML files
+# *.yaml
