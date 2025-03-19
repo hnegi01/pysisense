@@ -13,5 +13,5 @@ pysisense.egg-info/
 # Ignore log files
 logs/*.log
 
-# # Ignore YAML files
-# *.yaml
+# Ignore YAML files
+*.yaml
