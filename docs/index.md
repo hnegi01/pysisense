@@ -10,25 +10,25 @@ This SDK provides a structured, Pythonic interface for interacting with the Sise
 
 The documentation is organized by feature/module. Click on any section to learn more:
 
-- [Access Management](docs/access_management.md)  
+- [Access Management](access_management.md)  
   Manage users, groups, roles, and share permissions.
-  [Access Management Examples](examples/access_management_example.py)
+  [Access Management Examples](../examples/access_management_example.py)
 
-- [Dashboard](docs/dashboard.md)  
+- [Dashboard](dashboard.md)  
   Read, export, share, and change ownership of dashboards.
-  [Dashboard Examples](examples/dashboard_example.py)
+  [Dashboard Examples](../examples/dashboard_example.py)
 
-- [Data Model](docs/datamodel.md)  
+- [Data Model](datamodel.md)  
   Inspect datasets, tables, columns, and schema definitions.
-  [Data Model Examples](examples/datamodel_example.py)
+  [Data Model Examples](../examples/datamodel_example.py)
 
-- [Migration](docs/migration.md)  
-  [Migration Examples](examples/migration_example.py)
+- [Migration](migration.md)  
+  [Migration Examples](../examples/migration_example.py)
 
-- [Api Client](docs/api_client.md)  
+- [Api Client](api_client.md)  
   Automate cross-environment migration of users, dashboards, and models.
 
-- [Utils](docs/utils.md)  
+- [Utils](utils.md)  
   Automate cross-environment migration of users, dashboards, and models.
 
 ---
@@ -41,6 +41,7 @@ Before using the SDK, make sure you have a properly structured `config.yaml`:
 domain: "your-domain.sisense.com"
 is_ssl: true
 token: "<your_api_token>"
+```
 
 **Important:** It is recommended to use a new dedicated Sisense admin user's token to ensure all API methods function as expected.  
 Using restricted or scoped users may result in failures or inconsistent behavior, especially for:

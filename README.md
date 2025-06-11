@@ -62,16 +62,16 @@ Using restricted or scoped users may result in failures or inconsistent behavior
 
 A complete set of usage examples is available under [`examples/`](examples). Each file demonstrates common operations and usage patterns:
 
-- [`access_management_examples.py`](examples/access_management_examples.py)  
+- [`access_management_example.py`](examples/access_management_example.py)  
   Identity & Governance – Manage users, groups, folder access, and governance operations such as identifying unused assets.
 
-- [`datamodel_examples.py`](examples/datamodel_examples.py)  
+- [`datamodel_example.py`](examples/datamodel_example.py)  
   Data Modeling – Work with datasets, tables, columns, and schema structures within Sisense data models.
 
-- [`dashboard_examples.py`](examples/dashboard_examples.py)  
+- [`dashboard_example.py`](examples/dashboard_example.py)  
   Dashboard Lifecycle – Retrieve, update, reassign ownership, and manage shares of Sisense dashboards.
 
-- [`migration_examples.py`](examples/migration_examples.py)  
+- [`migration_example.py`](examples/migration_example.py)  
   Environment Migration – Migrate users, dashboards, and data models across Sisense environments (e.g., from dev to prod).
 
 These example files are **not meant to be executed end-to-end**, but rather serve as reference implementations to guide usage within your own environment or automation pipelines.

@@ -6,6 +6,21 @@ The `Migration` class manages the migration of users, groups, dashboards, and da
 Initialization
 --------------
 
+## Example Configuration Files
+
+To use the `Migration` class, you must provide two YAML files representing your source and target Sisense environments:
+
+- [`examples/source.yaml`](../examples/source.yaml): Configuration for the **source** Sisense environment.
+- [`examples/target.yaml`](../examples/target.yaml): Configuration for the **target** Sisense environment.
+
+These files should follow the same structure as [`examples/config.yaml`](../examples/config.yaml), including:
+
+```yaml
+domain: "your-domain.sisense.com"
+is_ssl: true
+token: "<your_api_token>"
+```
+
 ### `__init__(self, source_yaml, target_yaml, debug=False)`
 
 Initializes the Migration class with API clients and Access Management for both source and target environments.
