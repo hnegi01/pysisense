@@ -8,6 +8,7 @@ __pycache__/
 # Virtual environments
 .env
 pysisense_venv/
+venv-pypi/
 
 # macOS system files
 .DS_Store

@@ -9,7 +9,7 @@ It simplifies complex API operations and allows you to automate and manage **use
 
 ## 📦 Installation
 
-You can install `pysisense` from PyPI:
+You can install `pysisense` from [PyPI](https://pypi.org/project/pysisense/):
 
 ```bash
 pip install pysisense
@@ -27,7 +27,7 @@ pip install -e .
 
 ### 1️⃣ Configure the YAML
 
-Before running any scripts, update the required YAML files in the [`examples/`](examples) folder:
+Before running any scripts, update the required YAML files in the [`examples/`](https://github.com/hnegi01/pysisense/tree/main/examples) folder:
 
 - `config.yaml` – for single-environment operations
 - `source.yaml` and `target.yaml` – for migration scenarios
@@ -60,18 +60,18 @@ Using restricted or scoped users may result in failures or inconsistent behavior
 
 ### 2️⃣ Use Example Scripts
 
-A complete set of usage examples is available under [`examples/`](examples). Each file demonstrates common operations and usage patterns:
+A complete set of usage examples is available under [`examples/`](https://github.com/hnegi01/pysisense/tree/main/examples). Each file demonstrates common operations and usage patterns:
 
-- [`access_management_example.py`](examples/access_management_example.py)  
+- [`access_management_example.py`](https://github.com/hnegi01/pysisense/blob/main/examples/access_management_example.py)  
   Identity & Governance – Manage users, groups, folder access, and governance operations such as identifying unused assets.
 
-- [`datamodel_example.py`](examples/datamodel_example.py)  
+- [`datamodel_example.py`](https://github.com/hnegi01/pysisense/blob/main/examples/datamodel_example.py)  
   Data Modeling – Work with datasets, tables, columns, and schema structures within Sisense data models.
 
-- [`dashboard_example.py`](examples/dashboard_example.py)  
+- [`dashboard_example.py`](https://github.com/hnegi01/pysisense/blob/main/examples/dashboard_example.py)  
   Dashboard Lifecycle – Retrieve, update, reassign ownership, and manage shares of Sisense dashboards.
 
-- [`migration_example.py`](examples/migration_example.py)  
+- [`migration_example.py`](https://github.com/hnegi01/pysisense/blob/main/examples/migration_example.py)  
   Environment Migration – Migrate users, dashboards, and data models across Sisense environments (e.g., from dev to prod).
 
 These example files are **not meant to be executed end-to-end**, but rather serve as reference implementations to guide usage within your own environment or automation pipelines.
@@ -115,19 +115,19 @@ You don’t need to create this folder manually — it will be created at runtim
 
 Comprehensive module-level documentation is available in the `docs/` folder:
 
--   [Index](docs/index.md) -- Overview of the SDK structure and modules
+-   [Index](https://github.com/hnegi01/pysisense/blob/main/docs/index.md) – Overview of the SDK structure and modules
 
--   [Api Client](docs/api_client.md) -- Base API wrapper for all HTTP operations
+-   [API Client](https://github.com/hnegi01/pysisense/blob/main/docs/api_client.md) – Base API wrapper for all HTTP operations  
 
--   [Access Management](docs/access_management.md) -- Manage users, groups, roles, and permissions
+-   [Access Management](https://github.com/hnegi01/pysisense/blob/main/docs/access_management.md) – Manage users, groups, roles, and permissions  
 
--   [Data Model](docs/datamodel.md) -- Handle datasets, tables, schemas, security, and deployment
+-   [Data Model](https://github.com/hnegi01/pysisense/blob/main/docs/datamodel.md) – Handle datasets, tables, schemas, security, and deployment  
 
--   [Dashboard](docs/dashboard.md) -- Retrieve, modify, and share Sisense dashboards
+-   [Dashboard](https://github.com/hnegi01/pysisense/blob/main/docs/dashboard.md) – Retrieve, modify, and share Sisense dashboards  
 
--   [Migration](docs/migration.md) -- Migrate users, dashboards, and models between environments
+-   [Migration](https://github.com/hnegi01/pysisense/blob/main/docs/migration.md) – Migrate users, dashboards, and models between environments  
 
--   [Utils](docs/utils.md) -- Helper functions for export, formatting, and data operations
+-   [Utils](https://github.com/hnegi01/pysisense/blob/main/docs/utils.md) – Helper functions for export, formatting, and data operations  
 
 You can also explore:
 
