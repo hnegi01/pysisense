@@ -5,7 +5,7 @@ long_description = open("README.md", encoding="utf-8").read() if os.path.exists(
 
 setup(
     name='pysisense',
-    version='0.1.0',
+    version='0.1.1',
     license="MIT",
     author='Himanshu Negi',
     author_email='himanshu.negi.08@gmail.com',
