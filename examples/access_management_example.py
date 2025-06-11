@@ -1,233 +1,283 @@
-# This script serves as a guide for how to interact with the AccessManagement class.
-# You can uncomment and run one example at a time to see the results.
-
-import sys
+# This script demonstrates how to interact with the AccessManagement class.
+# Assumes config.yaml is in the same folder as this script.
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import csv
+import json
+from pysisense import AccessManagement, APIClient
 
 
-# Importing the necessary classes from the pysisense package
-from pysisense.access_management import AccessManagement
-from pysisense.api_client import APIClient
+# Set the path to your config file
+config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
 
-# Create an instance of APIClient
-api_client = APIClient()
-# Initializes AccessManagement with the default config file
-access_mgmt = AccessManagement(debug=True)
+# Initialize the API client
+api_client = APIClient(config_file=config_path, debug=True)
 
-
-# # --- Example 1: Get User Information by Email ---
-# user_email = 'himanshu.negi@sisense.com'
-# response = access_mgmt.get_user(user_email)
-# print(response)
-# # Option: Convert the response to a DataFrame and print or export it
-# df = api_client.to_dataframe(response)
-# print(df)
-# # Option: Export the raw response to a CSV file
-# api_client.export_to_csv(response, file_name="user_info.csv")
+# Initialize the AccessManagement class
+access_mgmt = AccessManagement(api_client=api_client)
 
 
-# # --- Example 2: Get All Users ---
-# response = access_mgmt.get_users_all()
-# # Option: Convert the response to a DataFrame and print or export it
-# df = api_client.to_dataframe(response)
-# print(df)
-# api_client.export_to_csv(response, file_name="all_users.csv")
+# --- Example 1: Get User Information by Email ---
+user_email = 'john.doe@example.com'
+response = access_mgmt.get_user(user_email)
+print(json.dumps(response, indent=4))
+# Optional: Convert the response to a DataFrame and print or export it
+df = api_client.to_dataframe(response)
+print(df)
+# Optional: Export the raw response to a CSV file
+api_client.export_to_csv(response, file_name="user_info.csv")
 
 
-# # --- Example 3: Create a New User using role and group name instead of Ids ---
+# --- Example 2: Get All Users ---
+response = access_mgmt.get_users_all()
+# Optional: Convert the response to a DataFrame
+df = api_client.to_dataframe(response)
+print(df)
+# Optional: Export the raw response to a CSV file
+api_client.export_to_csv(response, file_name="all_users.csv")
 
-# # Define the user data
-# user_data = {
-#     "email": "himanshu@sisense.com",  # Required: User's email address
-#     "firstName": "Himanshu",  # Optional: User's first name
-#     "lastName": "Negi",  # Optional: User's last name
-#     "role": "dataDesigner",  # Optional: Remove this field if not needed; if omitted, the user will be assigned the default role of 'viewer'. Cannot be an empty string.
-#     "groups": ["groupa", "groupb"],  # Optional: List of group names, can be an empty list if the user is not part of any group
-#     "password": "Sisense141!@",  # Optional: Provide a password if needed; if omitted, the user will receive an email to set their password. Cannot be an empty string.
-#     "preferences": {  # Optional: User preferences, such as language settings, can be an empty dict if not needed
-#         "language": "en-US"
-#     }
-# }
 
-# # Attempt to create the new user
-# response = access_mgmt.create_user(user_data)
+# --- Example 3: Create a New User using role and group name instead of Ids ---
+# Define the user data
+user_data = {
+    "email": "john.doe@example.com",                    # Required: User's email address
+    "firstName": "John",                                # Optional: User's first name
+    "lastName": "Doe",                                  # Optional: User's last name
+    "role": "dataDesigner",                             # Optional: Remove this field if not needed; if omitted, the user will be assigned the default role of 'viewer'. Cannot be an empty string.
+    "groups": ["mig_test", "mig_test_2"],               # Optional: List of group names, can be an empty list if the user is not part of any group
+    "password": "Sisense141!@",                         # Optional: Provide a password if needed; if omitted, the user will receive an email to set their password. Cannot be an empty string so remove this field if not needed.
+    "preferences": {                                    # Optional: User preferences, such as language settings, can be an empty dict if not needed
+        "language": "en-US"
+    }
+}
+response = access_mgmt.create_user(user_data)
+print(json.dumps(response, indent=4))
 
-# # Create multiple user reading from a csv
-# """ Example CSV File:
-# email,firstName,lastName,role,groups,password,language
-# john.doe@example.com,John,Doe,dataDesigner,"groupa,groupb","Password123!","en-US"
-# jane.smith@example.com,Jane,Smith,viewer,"groupa","Password456!","fr-FR"
-# mike.jones@example.com,Mike,Jones,Designer,"","Password789!","es-ES"
-# """
 
-# # Path to your CSV file
-# csv_file_path = 'export.csv'
+"""
+Example: Create multiple users from a CSV file using the AccessManagement class.
 
-# # Open and read the CSV file
-# with open(csv_file_path, mode='r', newline='', encoding='utf-8') as csvfile:
-#     reader = csv.DictReader(csvfile)
+Expected CSV format:
+email,firstName,lastName,role,groups,password,language
+john.doe@example.com,John,Doe,dataDesigner,"groupa,groupb","Password123!","en-US"
+jane.smith@example.com,Jane,Smith,viewer,"groupa","Password456!","fr-FR"
+mike.jones@example.com,Mike,Jones,Designer,"","Password789!","es-ES"
+"""
+
+# Path to your CSV file
+csv_file_path = 'new_user.csv'
+
+# Create users from CSV
+with open(csv_file_path, mode="r", newline="", encoding="utf-8") as csvfile:
+    reader = csv.DictReader(csvfile)
+
+    for row_num, row in enumerate(reader, start=1):
+        if not row.get("email") or not row.get("password"):
+            print(f"Skipping row {row_num}: missing email or password")
+            continue
+
+        user_data = {
+            "email": row["email"],
+            "firstName": row.get("firstName", ""),
+            "lastName": row.get("lastName", ""),
+            "role": row.get("role", "viewer"),
+            "groups": [g.strip() for g in row.get("groups", "").split(",") if g.strip()],
+            "password": row["password"],
+            "preferences": {
+                "language": row.get("language", "en-US")
+            }
+        }
+
+        try:
+            response = access_mgmt.create_user(user_data)
+            print(json.dumps(response, indent=4))
+
+            if "error" not in response:
+                print(f"User {user_data['email']} created successfully.")
+            else:
+                print(f"Failed to create user {user_data['email']}: {response['error']}")
+        except Exception as e:
+            print(f"Error creating user {user_data['email']}: {e}")
+
+
+
+# --- Example 4: Update an Existing User ---
+user_name = "mike.jones@example.com"                      # Change this to the user you want to update
+# Define the new data for the user
+user_data = {
+    "firstName": "Mikey",                                 # Optional: Update user's first name
+    "lastName": "Jonesss",                                # Optional: Update user's last name
+    "role": "designer",                                   # Optional: Role name to update; will be mapped to corresponding roleId
+    "groups": ["mig_test"],                               # Optional: List of group names to update; will be mapped to corresponding group IDs
+    "preferences": {                                      # Optional: Update user preferences, such as language settings
+        "language": "fr-FR"
+    }
+}
+response = access_mgmt.update_user(user_name, user_data)
+print(json.dumps(response, indent=4))
+
+
+# --- Example 5: Delete a User using UserName ---
+user_name = "john.doe@example.com"  # Change this to the user you want to delete
+response = access_mgmt.delete_user(user_name)
+print(json.dumps(response, indent=4))
+if "error" not in response:
+    print(f"User {user_name} has been successfully deleted. Response: {response}")
+else:
+    print(f"Failed to delete user {user_name}. Error: {response['error']}")
+
+
+# --- Example 6: Get All Users in a Specific Group ---
+group_name = "Admins"
+response = access_mgmt.users_per_group(group_name)
+
+if isinstance(response, list):
+    print(f"Found {len(response)} users in group '{group_name}':")
+    for user in response:
+        print(f"- {user.get('userName')}")
     
-#     # Iterate over each row in the CSV file
-#     for row in reader:
-#         # Prepare user data from CSV row
-#         user_data = {
-#             "email": row['email'],
-#             "firstName": row['firstName'],
-#             "lastName": row['lastName'],
-#             "roleId": row['role'],
-#             "groups": row['groups'].split(',') if row['groups'] else [],  # Split groups by comma, handle empty string
-#             "password": row['password'],
-#             "preferences": {
-#                 "language": row['language']
-#             }
-#         }
-        
-#         # Attempt to create the new user
-#         response = access_mgmt.create_user(user_data)
+    df = api_client.to_dataframe(response)
+    print(df)
 
-# # --- Example 4: Update an Existing User ---
+elif isinstance(response, dict) and "error" in response:
+    print(f"No users found in the group '{group_name}'. Error: {response['error']}")
 
-# # Define the username (email) of the user to be updated
-# user_name = "john.doe@example.com"
-
-# # Define the new data for the user
-# user_data = {
-#     "firstName": "John",  # Optional: Update user's first name
-#     "lastName": "Doe",  # Optional: Update user's last name
-#     "role": "designer",  # Optional: Role name to update; will be mapped to corresponding roleId
-#     "groups": ["groupA", "groupB"],  # Optional: List of group names to update; will be mapped to corresponding group IDs
-#     "preferences": {  # Optional: Update user preferences, such as language settings
-#         "language": "fr-FR"
-#     }
-# }
-
-# # Attempt to update the user with the provided data
-# response = access_mgmt.update_user(user_name, user_data)
-
-# # --- Example 5: Delete a User using UserName---
-
-# # Define the username or email of the user you want to delete
-# user_name = "john.doe@example.com"
-
-# # Call the delete_user method to delete the user
-# response = access_mgmt.delete_user(user_name)
-
-# # Check if the user was successfully deleted
-# if response:
-#     print(f"User {user_name} has been successfully deleted. Response: {response}")
-# else:
-#     print(f"Failed to delete user {user_name}. Please check the logs for more details.")
+else:
+    print(f"Unexpected response structure: {response}")
 
 
-# # --- Example 6: Get All Users in a Specific Group ---
+# --- Example 7: Get All Groups with Associated Users ---
+response = access_mgmt.users_per_group_all()
 
-# # Define the group name to search for
-# group_name = "Admins"
-
-# # Fetch users belonging to the specified group
-# response = access_mgmt.users_per_group(group_name)
-
-# # Print the response
-# if response:
-#     print("Users found in group:", response)
-# else:
-#     print(f"No users found in the group '{group_name}'.")
-
-# df = api_client.to_dataframe(response)
-# print(df)
-
-# # --- Example 7: Get All Groups with Users ---
-
-# # Fetch all groups and their associated users
-# response = access_mgmt.users_per_group_all()
-
-# # Print the response
-# if response:
-#     for group_info in response:
-#         print(f"Group: {group_info['group']}")
-#         print(f"Usernames: {', '.join(group_info['username'])}\n")
-# else:
-#     print("No groups found with users.")
-
-# df = api_client.to_dataframe(response)
-# print(df)
+if isinstance(response, list) and response:
+    for group_info in response:
+        group_name = group_info.get("group", "Unknown Group")
+        usernames = group_info.get("username", [])
+        print(f"Group: {group_name}")
+        print("Usernames:", ", ".join(usernames) if usernames else "No users found")
+        print("-" * 40)
+else:
+    error_msg = response.get("error") if isinstance(response, dict) else "Unexpected or empty response"
+    print(f"No group-user associations found. Error: {error_msg}")
+# Convert to DataFrame for further processing or inspection
+df = api_client.to_dataframe(response)
+print(df)
+# Optional: Export the raw response to a CSV file
+api_client.export_to_csv(response, file_name="group_user_associations.csv")
 
 
-# # --- Example 8: Change Ownership of Folders and Dashboards ---
+# --- Example 8: Change Ownership of Folders and Dashboards ---
+# Admin user executing the action
+executing_user = "sisensepy@sisense.com"
+# Name of the folder whose ownership will be changed
+folder_to_transfer = "te1_sub"
+# Email of the new owner
+new_owner_email = "admin@sisense.com"
+# Permission to assign back to the original owner ("edit" or "view")
+original_owner_permission = "edit"
+# Whether to transfer ownership of dashboards inside the folder to the new folder owner
+include_dashboards = True
+# Perform the ownership transfer
+try:
+    response = access_mgmt.change_folder_and_dashboard_ownership(
+        executing_user=executing_user,
+        folder_name=folder_to_transfer,
+        new_owner_name=new_owner_email,
+        original_owner_rule=original_owner_permission,
+        change_dashboard_ownership=include_dashboards
+    )
 
-# # Define the user running the tool (must have access to the folder)
-# user_name = 'himanshu.negi@sisense.com'
-# # Define the target folder whose ownership needs to be changed
-# folder_name = 'level4b'
-# # Define the new owner to whom the folder and dashboard ownership will be transferred
-# new_owner_name = 'himanshu.negi@sisense.com'
-# # Optionally, specify the original owner rule (either 'edit' or 'view') - Default is 'edit'
-# original_owner_rule = 'edit'
-# # Optionally, specify whether to change the ownership of dashboards as well - Default is True
-# change_dashboard_ownership = True
-# # Call the method to change the ownership of folders and dashboards
-# response = access_mgmt.change_folder_and_dashboard_ownership(
-#     user_name=user_name,
-#     folder_name=folder_name,
-#     new_owner_name=new_owner_name,
-#     original_owner_rule=original_owner_rule,
-#     change_dashboard_ownership=change_dashboard_ownership
-# )
-# if response:
-#     print(f"Folders changed: {response['total_folders_changed']}")
-#     print(f"Dashboards changed: {response['total_dashboards_changed']}")
-# else:
-#     print("No changes were made.")
-
-# # --- Example 9: Get columns from a DataModel
-
-# datamodel_name = "Sample Lead Generation"
-# all_columns = access_mgmt.get_datamodel_columns(datamodel_name)
-# df = api_client.to_dataframe(all_columns)
-# print(df)
-
-# # --- Example 10: Get columns from a Dashboard
-
-# dashboard_id = "samp_lead_gen_2"
-# dashboard_columns = access_mgmt.get_dashboard_columns(dashboard_id)
-# df = api_client.to_dataframe(dashboard_columns)
-# print(df)
-
-# # --- Example 11: Get Unused Columns in a DataModel
-
-# unused_columns = access_mgmt.get_unused_columns(datamodel_name='Sample Lead Generation')
-# # Output the result
-# if unused_columns:
-#     df = api_client.to_dataframe(unused_columns)
-#     print(df)
+    if response and 'error' not in response:
+        print("Folder ownership transferred successfully.")
+        print(f"Total folders changed: {response.get('total_folders_changed', 0)}")
+        print(f"Total dashboards changed: {response.get('total_dashboards_changed', 0)}")
+    else:
+        print(f"Failed to change ownership: {response.get('error', 'Unknown error')}")
+except Exception as e:
+    print(f"An unexpected error occurred: {e}")
 
 
-# # --- Example 12: Get the dashboard shares info
-# dashboard_shares = access_mgmt.get_all_dashboard_shares()
-
-# # Printing or handling the result
-# df = api_client.to_dataframe(dashboard_shares)
-# # api_client.export_to_csv(dashboard_shares, file_name="dashboard_shares.csv")
-# print(df)
-
-# # --- Example: Create a Schedule Build for a DataModel in UTC
-
-# # Specify the schedule details
-# days = ["MON", "TUE", "FRI", "SAT", "SUN"]  # Days of the week
-# hour = 21  # 9 PM in UTC
-# minute = 0  # At the start of the hour
-# datamodel_name = 'snowflake_test'  # Name of the DataModel
-
-# # Create the schedule build
-# response = access_mgmt.create_schedule_build(days=days, hour=hour, minute=minute, datamodel_name=datamodel_name)
-
-# # Output the result
-# if "error" not in response:
-#     print("Schedule created successfully:", response)
-# else:
-#     print("Failed to create schedule:", response["error"])
+# --- Example 9: Get columns from a DataModel
+datamodel_name = "Sample ECommerce"
+all_columns = access_mgmt.get_datamodel_columns(datamodel_name)
+print(json.dumps(all_columns, indent=4))
+df = api_client.to_dataframe(all_columns)
+print(df)
 
 
+# --- Example 10: Get Unused Columns in a DataModel
+unused_columns = access_mgmt.get_unused_columns(datamodel_name='Sample ECommerce')
+print(json.dumps(unused_columns, indent=4))
+if unused_columns:
+    df = api_client.to_dataframe(unused_columns)
+    print(df)
+api_client.export_to_csv(unused_columns, file_name="unused_columns.csv")
 
 
+# --- Example 11: Get the dashboard shares info
+dashboard_shares = access_mgmt.get_all_dashboard_shares()
+df = api_client.to_dataframe(dashboard_shares)
+print(df)
+
+
+# --- Example 12: Create a Schedule Build for a DataModel in UTC
+#  Cron-Based Schedule (specific days and time in UTC)
+days = ["MON", "TUE", "FRI", "SAT", "SUN"]                      # Days of the week
+hour = 21                                                       # 9 PM UTC
+minute = 0                                                      # At the start of the hour
+datamodel_name = 'pysense_databricks_ec'                        # Name of the DataModel
+
+response = access_mgmt.create_schedule_build(
+    days=days,
+    hour=hour,
+    minute=minute,
+    datamodel_name=datamodel_name
+)
+if "error" not in response:
+    print("Cron-based schedule created successfully:", response)
+else:
+    print("Failed to create schedule:", response["error"])
+
+# Cron-Based Schedule for All Days
+days = ["*"]
+hour = 2                                                        # 2 AM UTC
+minute = 30
+datamodel_name = 'pysense_databricks_ec'
+
+response = access_mgmt.create_schedule_build(
+    days=days,
+    hour=hour,
+    minute=minute,
+    datamodel_name=datamodel_name,
+    build_type="FULL"
+)
+if "error" not in response:
+    print("Cron-based schedule created successfully:", response)
+else:
+    print("Failed to create schedule:", response["error"])
+
+# Interval-Based Schedule (1 Hour)
+datamodel_name = 'pysense_databricks_ec'
+
+response = access_mgmt.create_schedule_build(
+    datamodel_name=datamodel_name,
+    interval_hours=1
+)
+
+if "error" not in response:
+    print("Interval-based schedule created successfully:", response)
+else:
+    print("Failed to create schedule:", response["error"])
+
+# Interval-Based Schedule (2 Days, 1 Hour, 4 Minutes)
+datamodel_name = 'pysense_databricks_ec'
+
+response = access_mgmt.create_schedule_build(
+    datamodel_name=datamodel_name,
+    interval_days=2,
+    interval_hours=1,
+    interval_minutes=4
+)
+if "error" not in response:
+    print("Interval-based schedule created successfully:", response)
+else:
+    print("Failed to create schedule:", response["error"])

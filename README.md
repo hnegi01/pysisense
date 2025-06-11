@@ -1,21 +1,21 @@
 # 📊 Sisense SDK (`pysisense`)
 
-Sisense SDK (`pysisense`) is a Python library designed for seamless interaction with the **Sisense API**.  
-It simplifies API requests, allowing users to manage **assets, users, permissions, dashboards, data models**, and automate **dashboard migrations** between environments.
+**pysisense** is a Python SDK designed for seamless and structured interaction with the **Sisense API**.  
+It simplifies complex API operations and allows you to automate and manage **users**, **groups**, **dashboards**, **data models**, and more.
 
-🚀 **Version 1.0** – More features coming soon!
+> ✅ Built for automation, debugging, and extensibility.
 
 ---
 
-## 📥 Installation
+## 📦 Installation
 
-You can install `pysisense` using pip:
+You can install `pysisense` from PyPI:
 
 ```bash
 pip install pysisense
 ```
 
-For local development, install in **editable mode**:
+For local development, install in editable mode:
 
 ```bash
 pip install -e .
@@ -23,79 +23,126 @@ pip install -e .
 
 ---
 
-## 🔧 Usage
+## 🚀 Quick Start
 
-### **Initialize API Client**
-```python
-from pysisense.api_client import APIClient
+### 1️⃣ Configure the YAML
 
-# Create an instance of APIClient
-api_client = APIClient(config_file="config.yaml", debug=True)
+Before running any scripts, update the required YAML files in the [`examples/`](examples) folder:
+
+- `config.yaml` – for single-environment operations
+- `source.yaml` and `target.yaml` – for migration scenarios
+
+These contain fields like:
+
+```yaml
+domain: "your-domain.sisense.com"
+is_ssl: true
+token: "<your_api_token>"
 ```
+
+⚠️ **Do not commit your tokens. The provided YAMLs contain placeholder structure only.**
+
+### ⚠️ Important: Use a Dedicated Admin Token
+
+Some methods in this SDK require full administrative privileges to interact with Sisense resources (such as ownership changes, user migrations, or folder/dashboard access).
+
+To avoid permission-related issues or incomplete operations:
+
+It is recommended to use a new dedicated Sisense admin user's token when authenticating via your `config.yaml`.
+
+Using restricted or scoped users may result in failures or inconsistent behavior, especially for:
+
+- Folder and dashboard ownership changes
+- Granting permissions across environments
+- System-wide migrations
 
 ---
 
-## 📌 Features
-- ✅ **User & Group Management** – Create, update, and delete users/groups.
-- ✅ **Dashboard Management** – Fetch, update, and migrate dashboards between environments.
-- ✅ **Permissions & Access Control** – Manage user roles and permissions.
-- ✅ **Data Model Management** – Fetch and update data models.
-- ✅ **Logging & Error Handling** – Built-in error handling for API responses.
-- ✅ **Automated Migration** – Migrate dashboards, users, and data models between environments.
-- ✅ **Easy Data Handling** – Convert API responses to pandas DataFrames and export data to CSV effortlessly.
+### 2️⃣ Use Example Scripts
+
+A complete set of usage examples is available under [`examples/`](examples). Each file demonstrates common operations and usage patterns:
+
+- [`access_management_examples.py`](examples/access_management_examples.py)  
+  Identity & Governance – Manage users, groups, folder access, and governance operations such as identifying unused assets.
+
+- [`datamodel_examples.py`](examples/datamodel_examples.py)  
+  Data Modeling – Work with datasets, tables, columns, and schema structures within Sisense data models.
+
+- [`dashboard_examples.py`](examples/dashboard_examples.py)  
+  Dashboard Lifecycle – Retrieve, update, reassign ownership, and manage shares of Sisense dashboards.
+
+- [`migration_examples.py`](examples/migration_examples.py)  
+  Environment Migration – Migrate users, dashboards, and data models across Sisense environments (e.g., from dev to prod).
+
+These example files are **not meant to be executed end-to-end**, but rather serve as reference implementations to guide usage within your own environment or automation pipelines.
 
 ---
 
-## 🛠️ API Methods (Examples)
+### 3️⃣ Logs
 
-### **Get Users**
-```python
-from pysisense.accessmanagement import AccessManagement
+All logs are saved automatically to a local folder:
 
-access_mgmt = AccessManagement()
-users = access_mgmt.get_users()
-print(users)
+```
+logs/pysisense.log
 ```
 
-### **Create a New User**
-```python
-new_user = access_mgmt.create_user(email="newuser@example.com", name="New User", role="Viewer")
-print(new_user)
-```
-
-### **Get Dashboards**
-```python
-from pysisense.dashboard import Dashboard
-
-dashboard_mgmt = Dashboard()
-dashboards = dashboard_mgmt.get_dashboards()
-print(dashboards)
-```
-
-### **Migrate Dashboards**
-```python
-from pysisense.migration import Migration
-
-migration = Migration(source_yaml="source.yaml", target_yaml="target.yaml", debug=False)
-migration_results = migration.migrate_dashboard("dashboard123")
-print("Migration Results:", migration_results)
-```
+You don’t need to create this folder manually — it will be created at runtime in the **same directory where you run your scripts**.
 
 ---
 
-## 📌 Roadmap (Upcoming Features)
-- 🔹 **Dashboards & Data Model Management**
-- 🔹 **Support for More API Endpoints**
+## ✅ Features
+
+- 👥 **User & Group Management** – Create, update, delete, and fetch users or groups
+- 📊 **Dashboard Management** – Export, share, and migrate dashboards
+- 📦 **Data Models** – Explore, describe, and update schemas and security
+- 🔐 **Permissions** – Resolve and apply share rules (users & groups)
+- 🔄 **Cross-Environment Migrations** – Move dashboards, models, and users
+- 🧠 **Smart Logging & Data Helpers** – Auto log capture, CSV export, and DataFrame conversion
+- ➕ **And many more** – Refer to the documentation for full details
 
 ---
 
-## 📝 Contributing
+## 🔧 Design Philosophy
 
-We welcome contributions! To contribute:
-1. Fork the repository.
-2. Create a new feature branch (`feature-name`).
-3. Commit your changes.
-4. Open a pull request.
+- Pythonic SDK with class-based structure (`Dashboard`, `DataModel`, `AccessManagement`, `Migration`)
+- Modular YAML-based authentication
+- Built-in logging and exception handling
+- Designed for end-to-end automation and real-world use
+
+---
+
+📚 Documentation
+
+Comprehensive module-level documentation is available in the `docs/` folder:
+
+-   [Index](docs/index.md) -- Overview of the SDK structure and modules
+
+-   [Api Client](docs/api_client.md) -- Base API wrapper for all HTTP operations
+
+-   [Access Management](docs/access_management.md) -- Manage users, groups, roles, and permissions
+
+-   [Data Model](docs/datamodel.md) -- Handle datasets, tables, schemas, security, and deployment
+
+-   [Dashboard](docs/dashboard.md) -- Retrieve, modify, and share Sisense dashboards
+
+-   [Migration](docs/migration.md) -- Migrate users, dashboards, and models between environments
+
+-   [Utils](docs/utils.md) -- Helper functions for export, formatting, and data operations
+
+You can also explore:
+
+-   Inline method docstrings using `help()` in Python or directly within your IDE.
+
+---
+
+## 🛠️ Contributing
+
+We welcome your contributions!
+
+1. Fork this repo
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes
+4. Open a pull request for review
 
 ---
 
@@ -107,6 +154,6 @@ This project is licensed under the **MIT License**.
 
 ## 📧 Contact
 
-For questions or support, reach out at:  
-📩 **himanshu.negi.08@gmail.com**  
-🔗 [GitHub](https://github.com/hnegi01/pysisense)
+Maintainer: **Himanshu Negi**  
+📩 Email: `himanshu.negi.08@gmail.com`  
+🔗 [GitHub Repository](https://github.com/hnegi01/pysisense)

@@ -1,43 +1,19 @@
-"""
-The access_management.py module provides functionalities for managing users, groups, dashboards, and data models in Sisense.
-
-Methods:
-- __init__(): Initializes the AccessManagement class and sets up the API client.
-- get_user(): Retrieves user details by their email or username.
-- get_users_all(): Fetches all users along with their tenant, group, and role information.
-- create_user(): Creates a new user with specified role and group assignments. With names no need for Ids
-- update_user(): Updates an existing user's details.
-- delete_user(): Deletes a user from the system.
-- users_per_group(): Retrieves all users in a specific group.
-- users_per_group_all(): Fetches all groups and maps them with their associated users.
-- change_folder_and_dashboard_ownership(): Changes ownership of folders and optionally dashboards.
-- get_datamodel_columns(): Retrieves columns from a specified DataModel.
-- get_dashboard_columns(): Fetches all columns used in a specific dashboard.
-- get_unused_columns(): Identifies unused columns in a DataModel by comparing against dashboard usage.
-- get_all_dashboard_shares(): Retrieves share information for all dashboards.
-- create_schedule_build(): Creates a scheduled build for a DataModel in UTC time.
-"""
-
-
-from pysisense.api_client import APIClient
+from .api_client import APIClient
 
 class AccessManagement:
-    def __init__(self, api_client=None, config_file="config.yaml", debug=False):
+
+    def __init__(self, api_client=None, debug=False):
         """
         Initializes the AccessManagement class.
 
-        If no API client is provided, it will create an APIClient internally using the provided config file.
+        If no API client is provided, it will create an APIClient internally.
 
         Parameters:
             api_client (APIClient, optional): An existing APIClient instance. If None, a new APIClient is created.
-            config_file (str): Path to the YAML configuration file. Default is 'config.yaml'.
             debug (bool, optional): Enables debug logging if True. Default is False.
         """
-        # If an API client is provided, use it. Otherwise, initialize a new APIClient with the config file.
-        if api_client:
-            self.api_client = api_client
-        else:
-            self.api_client = APIClient(config_file=config_file, debug=debug)
+        # Use provided API client or create a new one
+        self.api_client = api_client if api_client else APIClient(debug=debug)
 
         # Use the logger from the APIClient instance
         self.logger = self.api_client.logger
@@ -51,7 +27,7 @@ class AccessManagement:
             user_name (str): The email or username of the user to be retrieved.
 
         Returns:
-            dict: A dictionary containing user details, or an empty dictionary if no user matches the provided username.
+            dict: A dictionary containing user details on success, or {'error': 'message'} on failure or if user not found.
         """
         self.logger.debug(f"Getting user with username: {user_name}")
 
@@ -63,14 +39,17 @@ class AccessManagement:
 
         # Check if the API request failed
         if not response or not response.ok:
-            self.logger.error(f"Failed to retrieve users from API for username: {user_name}. "
-                            f"Status Code: {response.status_code if response else 'No response'}")
-            print("Failed to retrieve users from API. Please check the logs for more details.")
-            return {}
+            error_msg = f"Failed to retrieve users from API for username: {user_name}."
+            self.logger.error(f"{error_msg} Status Code: {response.status_code if response else 'No response'}")
+            return {"error": error_msg}
 
         # Parse the response JSON
-        response_data = response.json()
-        self.logger.debug(f"Found {len(response_data)} users in the response.")
+        try:
+            users = response.json()
+            self.logger.debug(f"Found {len(users)} users in the response.")
+        except Exception as e:
+            self.logger.exception("Error decoding JSON response for user list.")
+            return {"error": "Failed to decode API response."}
 
         # Mapping role names
         ROLE_MAPPING = {
@@ -80,15 +59,12 @@ class AccessManagement:
         }
 
         # Iterate over each user in the response to find the one matching the given username
-        for user in response_data:
+        for user in users:
             try:
-                self.logger.debug(f"Checking user: {user['email']}")
-
-                if user["email"] == user_name:
-                    self.logger.info(f"Found user: {user['email']}")
-
-                    # Prepare the user's data including role and group information
-                    user_data = {
+                self.logger.debug(f"Checking user: {user.get('email')}")
+                if user.get("email") == user_name:
+                    self.logger.info(f"Found user: {user_name}")
+                    return {
                         'USER_ID': user["_id"],
                         'USER_NAME': user["userName"],
                         'FIRST_NAME': user["firstName"],
@@ -97,21 +73,13 @@ class AccessManagement:
                         'IS_ACTIVE': user["active"],
                         'ROLE_ID': user["role"]["_id"],
                         'ROLE_NAME': ROLE_MAPPING.get(user["role"]["name"], user["role"]["name"]),
-                        'GROUPS': [group["name"] for group in user.get("groups", [])]  # Extract group names
+                        'GROUPS': [g["name"] for g in user.get("groups", [])]
                     }
-
-                    #print(f"User found: {user_data}")
-                    return user_data
-
             except Exception as e:
-                self.logger.error(f"Error processing user {user['email']}: {e}")
-                print(f"Error processing user {user['email']}. Check logs for details.")
+                self.logger.exception(f"Error processing user object: {user}")
 
-        # If no matching user is found, log an error and return an empty dictionary
-        self.logger.error(f"User with username {user_name} not found")
-        print(f"User with username {user_name} not found. Please check the logs for more details.")
-        return {}
-
+        self.logger.warning(f"User with username '{user_name}' not found.")
+        return {"error": f"User '{user_name}' not found."}
 
 
     def get_users_all(self):
@@ -125,7 +93,8 @@ class AccessManagement:
             None
 
         Returns:
-            list: A list of dictionaries where each dictionary contains user details and group information.
+            list: A list of dictionaries where each dictionary contains user details and group information,
+                or a list with a single dict containing an 'error' key if retrieval fails.
         """
         self.logger.debug("Getting all users")
 
@@ -138,10 +107,13 @@ class AccessManagement:
         # Check if the API request failed
         if not response or not response.ok:
             self.logger.error("Failed to retrieve users from API")
-            print("Failed to retrieve users from API. Please check the logs for more details.")
-            return None
+            return [{"error": "Failed to retrieve users from API"}]
 
-        response_data = response.json()
+        try:
+            response_data = response.json()
+        except Exception as e:
+            self.logger.exception("Failed to parse user response JSON.")
+            return [{"error": "Failed to parse user response"}]
 
         # Initialize list to store user information
         data_list = []
@@ -186,18 +158,64 @@ class AccessManagement:
                 self.logger.debug(f"Successfully processed user: {user['email']}")
 
             except Exception as e:
-                self.logger.error(f"Error processing user {user['email']}: {e}")
-                print(f"Error processing user {user['email']}. Check logs for details.")
+                self.logger.exception(f"Error processing user {user.get('email', 'Unknown')}")
 
         # Log the result and return the final data list
         if data_list:
             self.logger.info(f"Found {len(data_list)} users")
-            print(f"Found {len(data_list)} users.")
         else:
-            self.logger.error("No users found")
-            print("No users found. Please check the logs for more details.")
-            
+            self.logger.warning("No users found in the response")
+            return [{"error": "No users found"}]
+
         return data_list
+
+
+    def get_group(self, name):
+        """
+        Retrieves group details by their name.
+
+        Parameters:
+            name (str): The name of the group to be retrieved.
+
+        Returns:
+            dict: A dictionary containing group details,
+                or a dictionary with an 'error' key if retrieval fails or group not found.
+        """
+        self.logger.debug(f"Starting 'get_group' method for group name: {name}")
+
+        # Make the API call to fetch groups by name
+        response = self.api_client.get(f"/api/v1/groups?name={name}")
+
+        if not response or not response.ok:
+            status_code = response.status_code if response else 'No response'
+            self.logger.error(f"Failed to retrieve groups for name '{name}'. Status Code: {status_code}")
+            return {"error": f"Failed to retrieve groups for name '{name}'"}
+
+        try:
+            response_data = response.json()
+        except Exception as e:
+            self.logger.exception("Failed to parse group response JSON.")
+            return {"error": "Failed to parse group response JSON"}
+
+        if not response_data:
+            self.logger.warning(f"No group found with name '{name}'")
+            return {"error": f"No group found with name '{name}'"}
+
+        group = response_data[0]
+        group_id = group.get("_id")
+        group_name = group.get("name")
+
+        if not group_id or not group_name:
+            self.logger.error(f"Incomplete group data for name '{name}'")
+            return {"error": f"Group '{name}' found but missing expected fields"}
+
+        self.logger.debug(f"Group '{name}' found. ID: {group_id}")
+        return {
+            "GROUP_ID": group_id,
+            "GROUP_NAME": group_name,
+            "defaultRole": group.get("defaultRole", "")
+        }
+
 
 
     def create_user(self, user_data):
@@ -210,7 +228,8 @@ class AccessManagement:
                             role (role name), groups (list of group names), and preferences.
 
         Returns:
-            dict or None: The response from the API if successful, None otherwise.
+            dict: The response from the API if successful,
+                or a dictionary with an 'error' key if the operation fails.
         """
         self.logger.debug(f"Creating user with data: {user_data}")
 
@@ -221,47 +240,43 @@ class AccessManagement:
         }
 
         # Convert the role name in the user_data to uppercase for case-insensitive matching
-        user_role = user_data["role"].upper()
-        mapped_role = role_alias_mapping.get(user_role, user_role)  # Replace with mapped role if it exists
+        user_role = user_data.get("role", "").upper()
+        mapped_role = role_alias_mapping.get(user_role, user_role)
 
-        # Fetch roles from the API and map them, converting names to uppercase
+        # Step 1: Fetch roles from the API
         role_response = self.api_client.get('/api/roles')
         if not role_response or not role_response.ok:
             self.logger.error("Failed to fetch roles from API")
-            print("Failed to fetch roles from API. Please check the logs for more details.")
-            return None
+            return {"error": "Failed to fetch roles from API"}
 
         roles_mapping = [{"id": role["_id"], "name": role["name"].upper()} for role in role_response.json()]
         self.logger.debug(f"Roles mapping: {roles_mapping}")
 
-        # Replace the role name with the corresponding ID (case-insensitive)
+        # Step 2: Resolve roleId from role name
         for role in roles_mapping:
             if role["name"] == mapped_role:
-                user_data["roleId"] = role["id"]  # Use roleId for the API call
+                user_data["roleId"] = role["id"]
                 break
         else:
-            self.logger.error(f"Role '{user_data['role']}' not found in roles_mapping")
-            raise ValueError(f"Role '{user_data['role']}' not found in roles_mapping")
+            error_msg = f"Role '{user_data.get('role')}' not found in roles_mapping"
+            self.logger.error(error_msg)
+            return {"error": error_msg}
 
-        # Remove the 'role' key from user_data since we're using 'roleId'
         user_data.pop("role", None)
 
-        # Handle group mapping only if groups are provided
-        if user_data.get("groups"):
-            # Convert the group names in the user_data to uppercase for case-insensitive matching
-            user_data["groups"] = [group_name.upper() for group_name in user_data["groups"]]
+        # Step 3: Resolve group IDs from group names (if provided)
+        group_names = user_data.get("groups", [])
+        if group_names:
+            user_data["groups"] = [group.upper() for group in group_names]
 
-            # Fetch groups from the API and map them, converting names to uppercase
             group_response = self.api_client.get('/api/v1/groups')
             if not group_response or not group_response.ok:
                 self.logger.error("Failed to fetch groups from API")
-                print("Failed to fetch groups from API. Please check the logs for more details.")
-                return None
+                return {"error": "Failed to fetch groups from API"}
 
             groups_mapping = [{"id": group["_id"], "name": group["name"].upper()} for group in group_response.json()]
             self.logger.debug(f"Groups mapping: {groups_mapping}")
 
-            # Replace each group name with the corresponding ID (case-insensitive)
             updated_groups = []
             for group_name in user_data["groups"]:
                 for group in groups_mapping:
@@ -269,30 +284,35 @@ class AccessManagement:
                         updated_groups.append(group["id"])
                         break
                 else:
-                    self.logger.error(f"Group '{group_name}' not found in groups_mapping")
-                    raise ValueError(f"Group '{group_name}' not found in groups_mapping")
+                    error_msg = f"Group '{group_name}' not found in groups_mapping"
+                    self.logger.error(error_msg)
+                    return {"error": error_msg}
 
-            # Update the user_data with the list of group IDs
             user_data["groups"] = updated_groups
         else:
-            # If no groups are provided, ensure the groups key remains an empty list
             user_data["groups"] = []
 
-        # Log the final payload before sending the request
+        # Step 4: Send POST request to create the user
+        # Step 4: Send POST request to create the user
         self.logger.debug(f"Final user data for API call: {user_data}")
-
-        # Send the POST request to create the user
         response = self.api_client.post("/api/v1/users", data=user_data)
+
         if response and response.ok:
             response_data = response.json()
             self.logger.info(f"User created successfully: {response_data}")
-            print(f"User has been created successfully. Response: {response_data}")
             return response_data
         else:
-            error_message = response.json().get("error", "Unknown error") if response else "No response received"
+            try:
+                error_json = response.json()
+                if isinstance(error_json, dict) and "error" in error_json:
+                    error_message = error_json["error"].get("message", str(error_json["error"]))
+                else:
+                    error_message = error_json.get("error", str(error_json))
+            except Exception:
+                error_message = "No response body or invalid JSON"
+
             self.logger.error(f"Failed to create user. Error: {error_message}")
-            print(f"Failed to create user. Error: {error_message}")
-            return None
+            return {"error": error_message}
 
 
     def update_user(self, user_name, user_data):
@@ -304,18 +324,18 @@ class AccessManagement:
             user_data (dict): A dictionary containing user details to update, such as role, groups, etc.
 
         Returns:
-            dict or None: The response from the API if successful, None otherwise.
+            dict: The response from the API if successful,
+                or a dictionary with an 'error' key if the operation fails.
         """
         self.logger.debug(f"Updating user with username: {user_name}")
-        
+
         # Reuse the get_user method to fetch user details
         user = self.get_user(user_name)
 
-        # If user is not found, return None
+        # If user is not found, return error
         if not user:
             self.logger.error(f"User '{user_name}' not found.")
-            print(f"User '{user_name}' not found. Please check the logs for more details.")
-            return None
+            return {"error": f"User '{user_name}' not found."}
 
         # Custom role mapping
         role_alias_mapping = {
@@ -323,51 +343,45 @@ class AccessManagement:
             "DESIGNER": "CONTRIBUTOR"
         }
 
-        # Convert the role name in the user_data to uppercase for case-insensitive matching
+        # Step 1: Resolve role if provided
         if "role" in user_data:
             user_role = user_data["role"].upper()
-            mapped_role = role_alias_mapping.get(user_role, user_role)  # Replace with mapped role if it exists
+            mapped_role = role_alias_mapping.get(user_role, user_role)
 
-            # Fetch roles from the API and map them, converting names to uppercase
             role_response = self.api_client.get('/api/roles')
             if not role_response or not role_response.ok:
                 self.logger.error("Failed to fetch roles from API. "
                                 f"Status Code: {role_response.status_code if role_response else 'No response'}")
-                print("Failed to fetch roles from API. Please check the logs for more details.")
-                return None
+                return {"error": "Failed to fetch roles from API."}
 
             roles_mapping = [{"id": role["_id"], "name": role["name"].upper()} for role in role_response.json()]
             self.logger.debug(f"Roles mapping: {roles_mapping}")
 
-            # Replace the role name with the corresponding ID (case-insensitive)
             for role in roles_mapping:
                 if role["name"] == mapped_role:
                     user_data["roleId"] = role["id"]
                     break
             else:
-                self.logger.error(f"Role '{user_data['role']}' not found in roles_mapping")
-                raise ValueError(f"Role '{user_data['role']}' not found in roles_mapping")
+                error_msg = f"Role '{user_data['role']}' not found in roles_mapping"
+                self.logger.error(error_msg)
+                return {"error": error_msg}
 
-            # Remove the 'role' key from user_data since we're using 'roleId'
             user_data.pop("role", None)
 
-        # Handle group mapping only if groups are provided
-        if user_data.get("groups"):
-            # Convert the group names in the user_data to uppercase for case-insensitive matching
-            user_data["groups"] = [group_name.upper() for group_name in user_data["groups"]]
+        # Step 2: Resolve groups if provided
+        group_names = user_data.get("groups", [])
+        if group_names:
+            user_data["groups"] = [group.upper() for group in group_names]
 
-            # Fetch groups from the API and map them, converting names to uppercase
             group_response = self.api_client.get('/api/v1/groups')
             if not group_response or not group_response.ok:
                 self.logger.error("Failed to fetch groups from API. "
                                 f"Status Code: {group_response.status_code if group_response else 'No response'}")
-                print("Failed to fetch groups from API. Please check the logs for more details.")
-                return None
+                return {"error": "Failed to fetch groups from API."}
 
             groups_mapping = [{"id": group["_id"], "name": group["name"].upper()} for group in group_response.json()]
             self.logger.debug(f"Groups mapping: {groups_mapping}")
 
-            # Replace each group name with the corresponding ID (case-insensitive)
             updated_groups = []
             for group_name in user_data["groups"]:
                 for group in groups_mapping:
@@ -375,30 +389,26 @@ class AccessManagement:
                         updated_groups.append(group["id"])
                         break
                 else:
-                    self.logger.error(f"Group '{group_name}' not found in groups_mapping")
-                    raise ValueError(f"Group '{group_name}' not found in groups_mapping")
+                    error_msg = f"Group '{group_name}' not found in groups_mapping"
+                    self.logger.error(error_msg)
+                    return {"error": error_msg}
 
-            # Update the user_data with the list of group IDs
             user_data["groups"] = updated_groups
         else:
-            # If no groups are provided, ensure the groups key remains an empty list
             user_data["groups"] = []
 
-        # Log the final payload before sending the request
+        # Step 3: Send the PATCH request to update the user
         self.logger.debug(f"Final updated user data for API call: {user_data}")
+        response = self.api_client.patch(f"/api/v1/users/{user['USER_ID']}", data=user_data)
 
-        # Send the PATCH request to update the user
-        response = self.api_client.patch(f"/api/v1/users/{user['_id']}", data=user_data)
         if response and response.ok:
             response_data = response.json()
             self.logger.info(f"User updated successfully: {response_data}")
-            print(f"User has been updated successfully. Response: {response_data}")
             return response_data
         else:
             error_message = response.json().get("error", "Unknown error") if response else "No response received"
             self.logger.error(f"Failed to update user. Error: {error_message}")
-            print(f"Failed to update user. Error: {error_message}")
-            return None
+            return {"error": error_message}
 
 
     def delete_user(self, user_name):
@@ -409,83 +419,99 @@ class AccessManagement:
             user_name (str): The email or username of the user to be deleted.
 
         Returns:
-            dict or None: The response from the API if successful, None otherwise.
+            dict: Response from the API if successful, or an error message dict.
         """
         self.logger.debug(f"Starting 'delete_user' method for username: {user_name}")
         
         # Reuse the get_user method to fetch user details
         self.logger.debug(f"Fetching user details for '{user_name}' using 'get_user' method.")
         user = self.get_user(user_name)
+        self.logger.debug(f"User details fetched: {user}")
 
-        # If user is not found, log and return None
-        if not user:
-            self.logger.error(f"User with username '{user_name}' not found. Cannot proceed with deletion.")
-            print(f"User with username '{user_name}' not found. Please check the logs for more details.")
+        # If user is not found, log and return error
+        if not user or 'error' in user:
+            error_msg = f"User '{user_name}' not found. Cannot proceed with deletion."
+            self.logger.error(error_msg)
             self.logger.debug(f"Completed 'delete_user' method for username: {user_name}")
-            return None
+            return {"error": error_msg}
+        user_id = user.get("_id") or user.get("USER_ID")  # support both formats just in case
+        if not user_id:
+            self.logger.error(f"User object for '{user_name}' is missing ID field. Cannot proceed.")
+            return {"error": f"User '{user_name}' found but no ID field present."}
 
-        self.logger.debug(f"User '{user_name}' found. Proceeding to delete user with ID: {user['_id']}")
+        self.logger.debug(f"User '{user_name}' found. Proceeding to delete user with ID: {user_id}")
 
-        # Send the DELETE request to delete the user
-        response = self.api_client.delete(f"/api/v1/users/{user['_id']}")
+
+        # Send the DELETE request
+        response = self.api_client.delete(f"/api/v1/users/{user['USER_ID']}")
         
-        # Check response for success or failure
-        if response and response.ok:
-            self.logger.info(f"User '{user_name}' (ID: {user['_id']}) deleted successfully.")
-            print(f"User has been deleted successfully. Response: {response.json()}")
+        if response and response.status_code == 204:
+            self.logger.info(f"User '{user_name}' (ID: {user['USER_ID']}) deleted successfully. No content returned.")
             self.logger.debug(f"Completed 'delete_user' method for username: {user_name}")
-            return response.json()
+            return {"message": "User deleted successfully."}
+
+        elif response and response.ok:
+            try:
+                response_data = response.json()
+            except Exception:
+                response_data = {"message": "User deleted, but no JSON body returned."}
+            self.logger.info(f"User '{user_name}' (ID: {user['USER_ID']}) deleted successfully.")
+            self.logger.debug(f"API response: {response_data}")
+            self.logger.debug(f"Completed 'delete_user' method for username: {user_name}")
+            return response_data
+
         else:
-            error_message = response.json().get("error", "Unknown error") if response else "No response received"
-            self.logger.error(f"Failed to delete user with username '{user_name}' (ID: {user['_id']}). Error: {error_message}")
-            print(f"Failed to delete user. Error: {error_message}")
+            try:
+                error_message = response.json().get("error", "Unknown error")
+            except Exception:
+                error_message = "No response body or invalid JSON"
+            self.logger.error(f"Failed to delete user '{user_name}' (ID: {user['USER_ID']}). Error: {error_message}")
             self.logger.debug(f"Completed 'delete_user' method for username: {user_name}")
-            return None
+            return {"error": error_message}
+
 
 
     def users_per_group(self, group_name):
         """
-        Retrieves usernames of all users belonging to a specific group.
+        Retrieves all users within a specific group by name.
 
         Parameters:
-            group_name (str): The name of the group to filter users by.
+            group_name (str): The name of the group.
 
         Returns:
-            dict: A dictionary with 'group' as the group name and 'username' as a list of usernames in that group.
+            list or dict: A list of users in the group if successful, 
+                        or a dictionary containing an 'error' key if the operation fails.
         """
         self.logger.debug(f"Starting 'users_per_group' method for group: {group_name}")
-        
-        # Initialize dictionary to store the group and the corresponding usernames
-        users_in_group = {"group": group_name, "username": []}
 
-        self.logger.debug(f"Initialized group dictionary: {users_in_group}")
+        # Step 1: Fetch group details
+        group = self.get_group(group_name)
+        if not group or 'error' in group:
+            error_msg = f"Group '{group_name}' not found. Cannot proceed."
+            self.logger.error(error_msg)
+            return {"error": error_msg}
 
-        # Fetch all users and filter by the specified group using get_users_all
-        all_users = self.get_users_all()
-        if not all_users:
-            self.logger.error(f"No users returned from 'get_users_all'. Unable to filter users for group: {group_name}")
-            return users_in_group
+        group_id = group.get("GROUP_ID")
+        self.logger.debug(f"Group '{group_name}' found with ID: {group_id}. Proceeding to fetch users.")
 
-        self.logger.debug(f"Retrieved {len(all_users)} users. Now filtering for group '{group_name}'.")
+        # Step 2: Fetch users for the group
+        url = f'/api/v1/users?groupId={group_id}'
+        response = self.api_client.get(url)
 
-        # Filter users based on the group
-        for user in all_users:
-            if 'GROUPS' in user:
-                for group in user["GROUPS"]:
-                    if group.upper() == group_name.upper():
-                        self.logger.debug(f"User '{user['USER_NAME']}' found in group '{group_name}'.")
-                        users_in_group["username"].append(user["USER_NAME"])
+        if not response or not response.ok:
+            status = response.status_code if response else 'No response'
+            error_msg = f"Failed to retrieve users for group '{group_name}'. Status Code: {status}"
+            self.logger.error(error_msg)
+            return {"error": error_msg}
 
-        # Log the result and return the filtered list of users
-        if users_in_group["username"]:
-            self.logger.info(f"Found {len(users_in_group['username'])} users in the group '{group_name}'")
-            print(f"Found {len(users_in_group['username'])} users in the group '{group_name}'.")
-        else:
-            self.logger.error(f"No users found in the group '{group_name}'")
-            print(f"No users found in the group '{group_name}'. Please check the logs for more details.")
-
-        self.logger.debug(f"Final result for group '{group_name}': {users_in_group}")
-        return users_in_group
+        try:
+            users = response.json()
+            self.logger.debug(f"Found {len(users)} users in group '{group_name}'")
+            return users
+        except Exception as e:
+            error_msg = f"Failed to parse user list for group '{group_name}': {e}"
+            self.logger.error(error_msg)
+            return {"error": error_msg}
 
 
 
@@ -499,66 +525,59 @@ class AccessManagement:
         Returns:
             list: A list of dictionaries, where each dictionary contains a group name and the list of usernames in that group.
         """
-        # Define the groups to exclude
         EXCLUDED_GROUPS = {"Everyone", "All users in system"}
 
         self.logger.debug("Starting to retrieve all groups and their users.")
 
-        # Fetch all groups from the API
+        # Step 1: Fetch all groups
         group_response = self.api_client.get("/api/v1/groups")
         if not group_response or not group_response.ok:
-            self.logger.error("Failed to retrieve groups from API")
-            print("Failed to retrieve groups. Please check the logs for more details.")
+            self.logger.error("Failed to retrieve groups from API.")
             return []
 
         group_data = group_response.json()
+        self.logger.debug(f"Retrieved {len(group_data)} groups.")
 
-        # Fetch all users from get_users_all method
+        # Step 2: Fetch all users
         all_users = self.get_users_all()
         if not all_users:
-            self.logger.error(f"No users returned from 'get_users_all' method.")
+            self.logger.error("No users returned from 'get_users_all' method.")
             return []
 
-        # Step 1: Build a dictionary for groups with no users yet, excluding the unwanted groups
-        self.logger.debug("Building group dictionary.")
+        self.logger.debug(f"Retrieved {len(all_users)} users.")
+
+        # Step 3: Build the initial group dictionary
         groups_dict = {group['name']: [] for group in group_data if group['name'] not in EXCLUDED_GROUPS}
         if "Admins" not in groups_dict:
-            groups_dict["Admins"] = []  # Ensure 'Admins' group exists for admin roles
+            groups_dict["Admins"] = []  # Ensure 'Admins' group exists
 
-        # Step 2: Populate the users in each group from the user data
-        self.logger.debug("Populating groups with users.")
+        self.logger.debug(f"Initialized groups dictionary with {len(groups_dict)} entries (excluding excluded groups).")
+
+        # Step 4: Populate group membership from users
         for user in all_users:
-            # Check if 'GROUPS' key exists for this user
-            if "GROUPS" in user:
-                for group in user["GROUPS"]:
-                    group_name = group
-                    if group_name not in EXCLUDED_GROUPS:
-                        groups_dict[group_name].append(user["USER_NAME"])
-                        self.logger.debug(f"Added user {user['USER_NAME']} to group {group_name}")
+            for group in user.get("GROUPS", []):
+                if group not in EXCLUDED_GROUPS:
+                    groups_dict[group].append(user["USER_NAME"])
+                    self.logger.debug(f"Added user '{user['USER_NAME']}' to group '{group}'")
 
-        # Step 3: Populate users for the 'Admins' group based on their roles
-        self.logger.debug("Populating Admin group based on role names.")            
-        # Check users for admin roles and add them to the 'Admins' group
+        # Step 5: Add users with admin-like roles to 'Admins'
         for user in all_users:
             if user.get("ROLE_NAME") in ["sysAdmin", "dataAdmin", "admin"]:
                 groups_dict["Admins"].append(user["USER_NAME"])
-                self.logger.debug(f"Added user {user['USER_NAME']} to Admins group based on role")
+                self.logger.debug(f"Added user '{user['USER_NAME']}' to Admins group based on role.")
 
-        # Step 4: Format the result as a list of dictionaries
+        # Step 6: Prepare final result
         result = [{"group": group_name, "username": usernames} for group_name, usernames in groups_dict.items()]
 
-        # Log and return the result
         if result:
-            self.logger.info(f"Found {len(result)} groups with users.")
-            print(f"Found {len(result)} groups.")
+            self.logger.info(f"Resolved {len(result)} group entries.")
         else:
             self.logger.error("No groups or users found.")
-            print("No groups or users found. Please check the logs for more details.")
 
         return result
 
-    
-    def change_folder_and_dashboard_ownership(self, user_name, folder_name, new_owner_name, original_owner_rule='edit', change_dashboard_ownership=True):
+
+    def change_folder_and_dashboard_ownership(self, executing_user, folder_name, new_owner_name, original_owner_rule='edit', change_dashboard_ownership=True):
         """
         Method to change the ownership of folders and optionally dashboards.
 
@@ -571,69 +590,79 @@ class AccessManagement:
             user_name (str): The user running the tool. This is necessary for API access checks.
             folder_name (str): The target folder whose ownership needs to be changed.
             new_owner_name (str): The new owner to whom the folder (and optionally dashboards) ownership will be transferred.
-            original_owner_rule (str, optional): Specifies the ownership rule ('edit' or 'view'). Default is 'edit'.
+            original_owner_rule (str, optional): Specifies the ownership rule to set for original owner after changing ownership('edit' or 'view'). Default is 'edit'.
             change_dashboard_ownership (bool, optional): Specifies whether to also change the ownership of dashboards in the folder tree. Default is True.
         """
-
-        folder_details = set()  # Set to store folder IDs and names
-        dashboard_details = set()  # Set to store dashboard IDs and names
-        target_folder_found = False  # Variable to track if we found the target folder
-        total_folders_changed = 0  # Counter for folders whose ownership has been changed
-        total_dashboards_changed = 0  # Counter for dashboards whose ownership has been changed
+        folder_details = set()
+        dashboard_details = set()
+        total_folders_changed = 0
+        total_dashboards_changed = 0
 
         self.logger.info("Starting folder and dashboard traversal...")
         self.logger.debug(f"Looking for folder '{folder_name}' to change ownership to '{new_owner_name}'")
 
-        # Recursively traverse folders and subfolders, avoiding duplicates
+        matching_folders = []
+        oid_to_parent_map = {}
+
+        # Check if the executing user exists and retrieve their USER_ID
+        user_info = self.get_user(executing_user)
+        if not user_info or "USER_ID" not in user_info:
+            error_msg = f"User '{executing_user}' not found or USER_ID missing."
+            self.logger.error(error_msg)
+            return {"error": error_msg}
+        user_id = user_info["USER_ID"]
+
+        # Check if the new owner exists and retrieve their USER_ID
+        new_owner = self.get_user(new_owner_name)
+        if not new_owner or "USER_ID" not in new_owner:
+            error_msg = f"New owner '{new_owner_name}' not found or USER_ID missing."
+            self.logger.error(error_msg)
+            return {"error": error_msg}
+        new_owner_id = new_owner["USER_ID"]
+
+        # Build a parent map and collect matching folders
+        def build_folder_map_and_find_matches(folders, parent=None):
+            for folder in folders:
+                oid_to_parent_map[folder['oid']] = parent
+                self.logger.debug(f"Checking folder '{folder['name']}' (ID: {folder['oid']})")
+
+                if folder['name'] == folder_name:
+                    self.logger.info(f"Found target folder: {folder['name']} (ID: {folder['oid']})")
+                    matching_folders.append(folder)
+                    traverse_folder(folder)
+
+                if 'folders' in folder and folder['folders']:
+                    build_folder_map_and_find_matches(folder['folders'], folder)
+
+        # Traverse folder and dashboards
         def traverse_folder(folder):
             if (folder['oid'], folder['name']) not in folder_details:
                 folder_details.add((folder['oid'], folder['name']))
                 self.logger.info(f"Folder found: {folder['name']} (ID: {folder['oid']})")
 
-                if 'dashboards' in folder and folder["dashboards"]:
-                    for dash in folder["dashboards"]:
-                        if (dash['oid'], dash['title']) not in dashboard_details:
-                            dashboard_details.add((dash['oid'], dash['title']))
-                            self.logger.info(f"Dashboard found: {dash['title']} (ID: {dash['oid']})")
+                for dash in folder.get("dashboards", []):
+                    if (dash['oid'], dash['title']) not in dashboard_details:
+                        dashboard_details.add((dash['oid'], dash['title']))
+                        self.logger.info(f"Dashboard found: {dash['title']} (ID: {dash['oid']})")
 
-                if "folders" in folder:
-                    for subfolder in folder["folders"]:
-                        traverse_folder(subfolder)
+                for subfolder in folder.get("folders", []):
+                    traverse_folder(subfolder)
             else:
-                if not folder.get("folders"):  # Only log if no subfolders exist
-                    self.logger.debug(f'No subfolders in folder - {folder["name"]}')
+                if not folder.get("folders"):
+                    self.logger.debug(f"No subfolders in folder - {folder['name']}")
 
-        # Search for the target folder and traverse siblings, subfolders, and parent folders
-        def search_for_target_and_traverse_tree(folders, target_folder_name):
-            nonlocal target_folder_found
-            parent_folder = None
+        # Traverse a folder’s parent and siblings
+        def traverse_parents_and_siblings(folder):
+            parent = oid_to_parent_map.get(folder['oid'])
+            if parent:
+                self.logger.info(f"Parent folder: {parent['name']} (ID: {parent['oid']})")
+                traverse_folder(parent)
 
-            for folder in folders:
-                self.logger.debug(f"Checking folder '{folder['name']}' (ID: {folder['oid']})")
-                if folder['name'] == target_folder_name:
-                    self.logger.info(f"Found target folder: {target_folder_name}")
-                    traverse_folder(folder)
-                    target_folder_found = True
-                    return folder
-
-                if 'folders' in folder:
-                    found_folder = search_for_target_and_traverse_tree(folder['folders'], target_folder_name)
-                    if found_folder:
-                        parent_folder = folder
-
-            return parent_folder
-
-        # Traverse the parent's siblings and parent folder
-        def traverse_parents_and_siblings(parent_folder):
-            if parent_folder:
-                self.logger.info(f"Parent folder: {parent_folder['name']} (ID: {parent_folder['oid']})")
-                traverse_folder(parent_folder)
-
-                if "folders" in parent_folder:
-                    for sibling in parent_folder["folders"]:
+                for sibling in parent.get("folders", []):
+                    if sibling['oid'] != folder['oid']:
                         traverse_folder(sibling)
 
-        # Fetch folder details and traverse relevant tree structure
+        # Entry point to fetch and process folders
         def get_folder_details():
             self.logger.debug("Fetching all folders from API")
             response = self.api_client.get('/api/v1/navver')
@@ -643,16 +672,18 @@ class AccessManagement:
                 self.logger.error("No folders found in the API response or invalid response.")
                 return False
 
-            self.logger.info(f"Searching for folder '{folder_name}'...")
-            parent_folder = search_for_target_and_traverse_tree(response['folders'], folder_name)
+            self.logger.info(f"Searching for folders named '{folder_name}'...")
+            build_folder_map_and_find_matches(response['folders'])
 
-            if target_folder_found:
-                self.logger.info(f"Folder '{folder_name}' found and traversed successfully.")
-                traverse_parents_and_siblings(parent_folder)
-                return True
-            else:
-                self.logger.warning(f"Folder '{folder_name}' not found in the response.")
+            if not matching_folders:
+                self.logger.warning(f"No folders named '{folder_name}' found.")
                 return False
+
+            for folder in matching_folders:
+                traverse_parents_and_siblings(folder)
+
+            self.logger.info(f"Total target folders matched: {len(matching_folders)}")
+            return True
 
         folder_found = get_folder_details()
 
@@ -675,7 +706,6 @@ class AccessManagement:
                     "queryParams": {"ownershipType": "allRoot", "search": "", "ownerInfo": True, "asObject": True},
                     "queryOptions": {"sort": {"title": 1}, "limit": limit, "skip": skip}
                 })
-                print(dashboard_response)
                 dashboard_response = dashboard_response.json()
 
                 if not dashboard_response or len(dashboard_response.get("items", [])) == 0:
@@ -693,12 +723,12 @@ class AccessManagement:
             user_folder_ids = {folder["oid"] for folder in folder_response if "oid" in folder}
             self.logger.debug(f"Collected user-accessible folder IDs: {user_folder_ids}")
 
+
             diff = all_folder_ids - user_folder_ids
             self.logger.info(f"Folders the user does not have access to: {diff}")
 
             for dash in dashboards:
                 if 'parentFolder' in dash and dash["parentFolder"] in diff:
-                    user_id = self.get_user(user_name)["USER_ID"]
                     payload = dash["shares"]
                     payload.append({
                         "shareId": user_id,
@@ -706,11 +736,11 @@ class AccessManagement:
                         "rule": "edit",
                         "subscribe": False
                     })
-                    self.logger.debug(f"Sharing dashboard {dash['title']} (ID: {dash['oid']}) with {user_name}")
+                    self.logger.debug(f"Sharing dashboard {dash['title']} (ID: {dash['oid']}) with {executing_user}")
                     share_response = self.api_client.post(f'/api/shares/dashboard/{dash["oid"]}?adminAccess=true', data={"sharesTo": payload})
                     share_response = share_response.json()
                     if share_response:
-                        self.logger.info(f"Dashboard '{dash['title']}' shared with {user_name}")
+                        self.logger.info(f"Dashboard '{dash['title']}' shared with {executing_user}")
                     else:
                         self.logger.error(f"Failed to share dashboard '{dash['title']}': {share_response}")
 
@@ -731,12 +761,11 @@ class AccessManagement:
 
         # Change ownership logic
         if folder_details or (change_dashboard_ownership and dashboard_details):
-            new_owner = self.get_user(new_owner_name)
-            new_owner_id = new_owner["USER_ID"]
-
             self.logger.info("Changing folder and dashboard owners...")
 
             # Change folder owners
+            self.logger.debug(f"Folders to be changed: {folder_details}")
+            self.logger.info(f"Changing ownership for {len(folder_details)} folders and {len(dashboard_details)} dashboards.")
             for folder_id, folder_name in folder_details:
                 data = {"owner": new_owner_id}
                 self.logger.debug(f"Changing owner for folder {folder_name} (ID: {folder_id}) with data: {data}")
@@ -749,7 +778,6 @@ class AccessManagement:
                 
                 if response and response.get("owner") == new_owner_id:
                     self.logger.info(f"Folder '{folder_name}' owner changed to {new_owner_name}")
-                    print(f"Folder '{folder_name}' owner changed to {new_owner_name}")
                     total_folders_changed += 1
                 else:
                     self.logger.error(f"Failed to change folder owner for '{folder_name}'.")
@@ -768,9 +796,8 @@ class AccessManagement:
 
                     if current_owner_id == new_owner_id:
                         self.logger.info(f"Dashboard '{dash_name}' is already owned by {new_owner_name}, no action needed.")
-                        print(f"Dashboard '{dash_name}' is already owned by {new_owner_name}, no action needed.")
                     else:
-                        if current_owner_id == self.get_user(user_name)["USER_ID"]:
+                        if current_owner_id == user_id:
                             data = {"ownerId": new_owner_id, "originalOwnerRule": original_owner_rule}
                             response = self.api_client.post(f'/api/v1/dashboards/{dash_id}/change_owner', data=data)
                             response = response.json()
@@ -781,11 +808,9 @@ class AccessManagement:
 
                         if response:
                             self.logger.info(f"Dashboard '{dash_name}' owner changed to {new_owner_name}")
-                            print(f"Dashboard '{dash_name}' owner changed to {new_owner_name}")
                             total_dashboards_changed += 1
                         else:
                             self.logger.error(f"Failed to change dashboard owner for '{dash_name}'.")
-                            print(f"Failed to change dashboard owner for '{dash_name}'.")
 
             # Log total changes
             self.logger.info(f"Ownership changed for {total_folders_changed} folders and {total_dashboards_changed} dashboards.")
@@ -793,10 +818,10 @@ class AccessManagement:
         else:
             self.logger.info("No folders or dashboards to change ownership. Exiting.")
             return None
- 
+    
     def get_datamodel_columns(self, datamodel_name):
         """
-        Method to retrieve columns from a DataModel by collecting them from the DataModel's datasets and tables.
+        Retrieves columns from a DataModel by collecting them from its datasets and tables.
 
         Parameters:
             datamodel_name (str): The name of the DataModel from which to extract columns.
@@ -812,45 +837,59 @@ class AccessManagement:
         self.logger.debug(f"Fetching DataModel ID for '{datamodel_name}'")
         schema_url = "/api/v2/datamodels/schema"
         response = self.api_client.get(schema_url)
+
         if not response or response.status_code != 200:
             self.logger.error(f"Failed to fetch DataModel schema for '{datamodel_name}'")
             return []
 
         response_data = response.json()
         datamodel_id = next((x.get("oid") for x in response_data if x.get("title") == datamodel_name), None)
+
         if not datamodel_id:
             self.logger.error(f"DataModel '{datamodel_name}' not found.")
             return []
 
-        self.logger.info(f"DataModel ID for '{datamodel_name}' is {datamodel_id}")
+        self.logger.info(f"DataModel ID for '{datamodel_name}': {datamodel_id}")
 
-        # Step 2: Get DataSet IDs
-        self.logger.debug(f"Fetching DataSet IDs for DataModel ID '{datamodel_id}'")
+        # Step 2: Get DataSets
+        self.logger.debug(f"Fetching DataSets for DataModel ID '{datamodel_id}'")
         dataset_url = f"/api/v2/datamodels/{datamodel_id}/schema/datasets"
         response = self.api_client.get(dataset_url)
+
         if not response or response.status_code != 200:
             self.logger.error(f"Failed to fetch DataSet schema for DataModel ID '{datamodel_id}'")
             return []
 
         response_data = response.json()
         dataset_ids = [x.get("oid") for x in response_data if "oid" in x]
+
         if not dataset_ids:
             self.logger.warning(f"No datasets found for DataModel '{datamodel_name}' (ID: {datamodel_id}).")
             return []
 
-        self.logger.info(f"DataSet IDs for DataModel '{datamodel_name}': {dataset_ids}")
+        total_datasets = len(dataset_ids)
+        self.logger.info(f"Found {total_datasets} datasets for DataModel '{datamodel_name}': {dataset_ids}")
 
         # Step 3: Loop through datasets and collect columns from tables
-        for dataset_id in dataset_ids:
-            self.logger.debug(f"Fetching tables for DataSet ID '{dataset_id}'")
+        total_tables = 0
+        total_columns = 0
+
+        for dataset_index, dataset_id in enumerate(dataset_ids, start=1):
+            self.logger.debug(f"Processing DataSet {dataset_index}/{total_datasets}: Fetching tables for DataSet ID '{dataset_id}'")
+
             table_url = f"{dataset_url}/{dataset_id}/tables"
             response = self.api_client.get(table_url)
+
             if not response or response.status_code != 200:
                 self.logger.error(f"Failed to fetch tables for DataSet ID '{dataset_id}'")
                 continue
 
-            response_data = response.json()
-            for table in response_data:
+            tables = response.json()
+            dataset_table_count = len(tables)
+            total_tables += dataset_table_count
+            self.logger.info(f"Dataset {dataset_index}: Found {dataset_table_count} tables in DataSet ID '{dataset_id}'")
+
+            for table in tables:
                 table_name = table.get("name")
                 if not table_name:
                     self.logger.warning(f"Table in DataSet ID '{dataset_id}' has no name. Skipping.")
@@ -860,6 +899,10 @@ class AccessManagement:
                 if not columns or not isinstance(columns, list):
                     self.logger.warning(f"Table '{table_name}' in DataSet ID '{dataset_id}' has no columns. Skipping.")
                     continue
+
+                table_column_count = len(columns)
+                total_columns += table_column_count
+                self.logger.debug(f"Table '{table_name}' contains {table_column_count} columns")
 
                 for column in columns:
                     column_name = column.get("name")
@@ -874,259 +917,63 @@ class AccessManagement:
                         "column": column_name
                     })
 
-        self.logger.info(f"Collected columns from DataModel '{datamodel_name}': {len(all_columns)} columns.")
+        # Step 4: Final logging
+        self.logger.info(f"DataModel '{datamodel_name}': Processed {total_datasets} datasets, {total_tables} tables, and {total_columns} columns.")
+        self.logger.debug(f"Final collected column data: {all_columns}")
+
         return all_columns
-
-    
-    def get_dashboard_columns(self, dashboard_name):
-        """
-        Method to retrieve columns from a specific dashboard.
-
-        This method uses pagination to search for a dashboard by its name,
-        then retrieves all the columns used in that dashboard from filters and widgets.
-
-        Parameters:
-            dashboard_name (str): The name of the dashboard to retrieve columns from.
-
-        Returns:
-            list: A list of dictionaries containing distinct table and column information from the dashboard.
-        """
-        limit = 50
-        skip = 0
-        dashboards = []
-        dashboard_columns = []
-
-        self.logger.info(f"Starting to retrieve columns from dashboard: {dashboard_name}")
-
-        # Step 1: Fetch all dashboards and search for the matching title
-        while True:
-            self.logger.debug(f"Fetching dashboards with limit={limit}, skip={skip}")
-            dashboard_response = self.api_client.post(
-                '/api/v1/dashboards/searches',
-                data={
-                    "queryParams": {
-                        "ownershipType": "allRoot",
-                        "search": dashboard_name,
-                        "ownerInfo": True,
-                        "asObject": True
-                    },
-                    "queryOptions": {
-                        "sort": {"title": 1},
-                        "limit": limit,
-                        "skip": skip
-                    }
-                }
-            )
-
-            if not dashboard_response or dashboard_response.status_code != 200:
-                self.logger.error(f"Failed to fetch dashboards: {dashboard_response}")
-                break
-
-            response_data = dashboard_response.json()
-            items = response_data.get("items", [])
-            if not items:
-                self.logger.info("No more dashboards found.")
-                break
-
-            dashboards.extend(items)
-            skip += limit
-            self.logger.debug(f"Retrieved {len(items)} dashboards, total so far: {len(dashboards)}")
-
-        # Step 2: Match the dashboard name and fetch the columns
-        matching_dashboard = next((dash for dash in dashboards if dash["title"] == dashboard_name), None)
-
-        if not matching_dashboard:
-            self.logger.error(f"Dashboard '{dashboard_name}' not found.")
-            return []
-
-        self.logger.info(f"Found dashboard '{dashboard_name}' with ID: {matching_dashboard['oid']}")
-
-        # Step 3: Fetch columns from the dashboard's filters and widgets
-        dashboard_url = f"/api/v1/dashboards/export?dashboardIds={matching_dashboard['oid']}&adminAccess=true"
-        dashboard_response = self.api_client.get(dashboard_url)
-
-        if not dashboard_response or dashboard_response.status_code != 200:
-            self.logger.error(f"Failed to export dashboard with ID '{matching_dashboard['oid']}'")
-            return []
-
-        dashboard_data = dashboard_response.json()
-        if not dashboard_data or not isinstance(dashboard_data, list):
-            self.logger.error(f"Unexpected dashboard data structure for ID '{matching_dashboard['oid']}'")
-            return []
-
-        dashboard = dashboard_data[0]
-        self.logger.debug(f"Analyzing Dashboard '{dashboard['title']}' (ID: {matching_dashboard['oid']})")
-
-        # Extract columns from filters
-        if "filters" in dashboard:
-            for filter in dashboard["filters"]:
-                if "levels" in filter:
-                    for level in filter["levels"]:
-                        dashboard_columns.append({
-                            "dashboard_name": dashboard_name,
-                            "source": "filter",
-                            "widget_id": "N/A",
-                            "table": level.get("table", "Unknown Table"),
-                            "column": level.get("column", "Unknown Column")
-                        })
-                elif "jaql" in filter:
-                    dashboard_columns.append({
-                        "dashboard_name": dashboard_name,
-                        "source": "filter",
-                        "widget_id": "N/A",
-                        "table": filter["jaql"].get("table", "Unknown Table"),
-                        "column": filter["jaql"].get("column", "Unknown Column")
-                    })
-
-        # Extract columns from widgets
-        for widget in dashboard.get("widgets", []):
-            for panel in widget.get("metadata", {}).get("panels", []):
-                for item in panel.get("items", []):
-                    if "context" in item.get("jaql", {}):
-                        for _, value in item["jaql"]["context"].items():
-                            dashboard_columns.append({
-                                "dashboard_name": dashboard_name,
-                                "source": "widget",
-                                "widget_id": widget.get("oid", "Unknown Widget"),
-                                "table": value.get("table", "Unknown Table"),
-                                "column": value.get("column", "Unknown Column")
-                            })
-                    else:
-                        dashboard_columns.append({
-                            "dashboard_name": dashboard_name,
-                            "source": "widget",
-                            "widget_id": widget.get("oid", "Unknown Widget"),
-                            "table": item.get("jaql", {}).get("table", "Unknown Table"),
-                            "column": item.get("jaql", {}).get("column", "Unknown Column")
-                        })
-
-        self.logger.debug(f"Full column data from dashboard '{dashboard_name}': {dashboard_columns}")
-
-        # Step 4: Deduplicate based on 'table' and 'column'
-        distinct_columns_set = set()
-        distinct_dashboard_columns = []
-
-        for entry in dashboard_columns:
-            key = (entry["table"], entry["column"])  # Define key based on table and column
-            if key not in distinct_columns_set:
-                distinct_dashboard_columns.append(entry)  # Add only distinct ones
-                distinct_columns_set.add(key)
-
-        self.logger.info(f"Retrieved {len(distinct_dashboard_columns)} distinct columns from dashboard '{dashboard_name}'")
-
-        return distinct_dashboard_columns
-
 
 
     def get_unused_columns(self, datamodel_name):
         """
-        Method to identify unused columns in a DataModel by comparing the columns 
-        in the DataModel against the columns used in its associated Dashboards.
+        Identify unused columns in a given DataModel by comparing all available columns against the columns referenced in associated dashboards.
 
-        **Covers the following:**
-        - **Filters**: Dashboard-level filters, Widget filters, Dependent Filters, and Measured Filters.
-        - **Widget Panels**: Row, Values, Column panels, and other widget panels.
-
-        **Order of Capture:**
-        1. **Columns from Dashboard Level**: Captures columns used in Dashboard Filters, including Dependent Filters.
-        2. **Columns from Widget Level**: 
-            - Captures columns used in Widget Panels, including Row, Values, Column panels.
-            - Captures columns from Measured Filters.
-            - Captures columns from Widget Filters.
+        Covers:
+        - Dashboard Filters: Dashboard-level filters, Widget filters, Dependent Filters.
+        - Widget Panels: Includes Row, Values, Column panels, and Measured Filters.
 
         Parameters:
-            datamodel_name (str): The name of the DataModel to analyze for unused columns.
+            datamodel_name (str): The name of the DataModel to analyze.
 
         Returns:
             list: A list of dictionaries containing unused column details with a "used" field set to True or False.
-
-        Limitation:
-            - The method assumes that the all Dashboards under this datamodel are shared with user.
         """
-        all_columns = []
-        dashboard_columns = []
-        
         self.logger.info(f"Starting analysis for unused columns in DataModel: {datamodel_name}")
+
+        # Step 1: Get all columns from the DataModel
+        all_columns = self.get_datamodel_columns(datamodel_name)
         
-        # Step 1: Get DataModel ID
-        self.logger.debug(f"Fetching DataModel ID for '{datamodel_name}'")
-        schema_url = "/api/v2/datamodels/schema"
-        response = self.api_client.get(schema_url)
-
-        if not response or not response.ok:
-            self.logger.error(f"Failed to fetch DataModel schema for '{datamodel_name}'. Status Code: {response.status_code if response else 'No response'}")
+        if not all_columns:
+            self.logger.warning(f"No columns found for DataModel '{datamodel_name}'. Exiting.")
             return []
 
-        # Parse the response
-        response_data = response.json()
-        datamodel_id = next((x["oid"] for x in response_data if x["title"] == datamodel_name), None)
+        total_datamodel_columns = len(all_columns)
+        self.logger.info(f"Retrieved {total_datamodel_columns} columns from DataModel '{datamodel_name}'")
 
-        if not datamodel_id:
-            self.logger.error(f"DataModel '{datamodel_name}' not found.")
-            return []
-
-        self.logger.info(f"DataModel ID for '{datamodel_name}' is {datamodel_id}")
-
-        # Step 2: Get DataSet IDs
-        self.logger.debug(f"Fetching DataSet IDs for DataModel ID '{datamodel_id}'")
-        dataset_url = f"/api/v2/datamodels/{datamodel_id}/schema/datasets"
-        response = self.api_client.get(dataset_url)
-
-        if not response or not response.ok:
-            self.logger.error(f"Failed to fetch DataSet schema for DataModel ID '{datamodel_id}'.")
-            return []
-
-        dataset_data = response.json()
-        dataset_ids = [x["oid"] for x in dataset_data]
-        self.logger.info(f"DataSet IDs for DataModel '{datamodel_name}': {dataset_ids}")
-
-        # Step 3: Loop through datasets and collect columns from tables
-        for dataset_id in dataset_ids:
-            self.logger.debug(f"Fetching tables for DataSet ID '{dataset_id}'")
-            table_url = f"{dataset_url}/{dataset_id}/tables"
-            response = self.api_client.get(table_url)
-
-            if not response or not response.ok:
-                self.logger.error(f"Failed to fetch tables for DataSet ID '{dataset_id}'")
-                continue
-
-            tables = response.json()
-            for table in tables:
-                table_name = table["name"]
-                for column in table["columns"]:
-                    all_columns.append({
-                        "datamodel_id": datamodel_id,
-                        "datamodel_name": datamodel_name,
-                        "table": table_name,
-                        "column": column["name"]
-                    })
-        
-        self.logger.info(f"Collected {len(all_columns)} columns from DataModel '{datamodel_name}'.")
-        self.logger.debug(f"Collected columns: {all_columns}")
-
-        # Step 4: Fetch dashboards using the DataModel
-        self.logger.info(f"Fetching Dashboards for DataModel '{datamodel_name}'")
-        dashboard_url = f"/api/v1/dashboards/admin?datasourceTitle={datamodel_name}"
+        # Step 2: Fetch dashboards associated with this DataModel
+        self.logger.info(f"Fetching dashboards linked to DataModel '{datamodel_name}'")
+        dashboard_url = f"/api/v1/dashboards/admin?dashboardType=owner&datasourceTitle={datamodel_name}"
         response = self.api_client.get(dashboard_url)
 
         if not response or not response.ok:
-            self.logger.error(f"Failed to fetch Dashboards for DataModel '{datamodel_name}'.")
+            self.logger.error(f"Failed to fetch dashboards for DataModel '{datamodel_name}'.")
             return []
 
         dashboards = response.json()
-
         if not dashboards:
-            message = (f"No dashboards are associated with the DataModel '{datamodel_name}' or the user does not have access to them.")
-            self.logger.warning(message)
-            print(message)  # Inform the user in the console
+            self.logger.warning(f"No dashboards found using DataModel '{datamodel_name}' or access is restricted.")
             return []
 
-        dashboard_ids = list({dash["oid"] for dash in dashboards})  # Use a set to remove duplicates, then convert back to a list
-        self.logger.info(f"Total number of Dashboards associated with DataModel '{datamodel_name}': {len(dashboard_ids)}")
+        dashboard_ids = {dash["oid"] for dash in dashboards}  # Get unique dashboard IDs
+        total_dashboards = len(dashboard_ids)
+        self.logger.info(f"Found {total_dashboards} dashboards linked to DataModel '{datamodel_name}'")
         self.logger.debug(f"Dashboard IDs: {dashboard_ids}")
 
+        # Step 3: Extract columns from all linked dashboards
+        dashboard_columns = []
+        total_filters = 0
+        total_widgets = 0
 
-        # Step 5: Extract columns used in Dashboards
         for dashboard_id in dashboard_ids:
             dashboard_url = f"/api/v1/dashboards/export?dashboardIds={dashboard_id}&adminAccess=true"
             response = self.api_client.get(dashboard_url)
@@ -1136,71 +983,156 @@ class AccessManagement:
                 continue
 
             dashboard = response.json()[0]
-            self.logger.debug(f"Analyzing Dashboard '{dashboard['title']}' (ID: {dashboard_id})")
+            dashboard_name = dashboard["title"]
+            self.logger.debug(f"Analyzing Dashboard '{dashboard_name}' (ID: {dashboard_id})")
 
             # Extract columns from filters
-            if dashboard.get('filters'):
-                for filter in dashboard["filters"]:
-                    if 'levels' in filter:
+            filter_count = 0
+            self.logger.debug(f"Extracting columns from filters for dashboard '{dashboard_name}'")
+            if "filters" in dashboard:
+                total_filters = len(dashboard["filters"])
+                self.logger.debug(f"Total filters found: {total_filters}")
+
+                for filter_index, filter in enumerate(dashboard["filters"], start=1):
+                    filter_count += 1
+                    self.logger.debug(f"Processing filter {filter_index}/{total_filters}")
+
+                    if "levels" in filter:
+                        levels_count = len(filter["levels"])
+                        self.logger.debug(f"Filter {filter_index}: Extracting {levels_count} levels")
+
                         for level in filter["levels"]:
+                            dim_value = level.get("dim", "Unknown.Table")
+                            table, column = dim_value.strip("[]").split(".", 1) if "." in dim_value else (dim_value.strip("[]"), "Unknown Column")
+
                             dashboard_columns.append({
-                                "datamodel_name": datamodel_name,
-                                "dashboard_name": dashboard["title"],
+                                "dashboard_name": dashboard_name,
                                 "source": "filter",
                                 "widget_id": "N/A",
-                                "table": level.get("table", "Unknown Table"),
-                                "column": level.get("column", "Unknown Column")
+                                "table": table,
+                                "column": column
                             })
-                    elif 'jaql' in filter:
+
+                            self.logger.debug(f"Filter {filter_index}: Extracted from levels - Table: {table}, Column: {column}")
+
+                    elif "jaql" in filter:
+                        dim_value = filter["jaql"].get("dim", "Unknown.Table")
+                        table, column = dim_value.strip("[]").split(".", 1) if "." in dim_value else (dim_value.strip("[]"), "Unknown Column")
+
                         dashboard_columns.append({
-                            "datamodel_name": datamodel_name,
-                            "dashboard_name": dashboard["title"],
+                            "dashboard_name": dashboard_name,
                             "source": "filter",
                             "widget_id": "N/A",
-                            "table": filter["jaql"].get("table", "Unknown Table"),
-                            "column": filter["jaql"].get("column", "Unknown Column")
+                            "table": table,
+                            "column": column
                         })
 
+                        self.logger.debug(f"Filter {filter_index}: Extracted from JAQL - Table: {table}, Column: {column}")
+
+            self.logger.info(f"Processed {filter_count} filters for dashboard '{dashboard_name}'")
+
             # Extract columns from widgets
-            for widget in dashboard["widgets"]:
-                for panel in widget["metadata"]["panels"]:
-                    for item in panel["items"]:
-                        if 'context' in item["jaql"]:
-                            for key, value in item["jaql"]["context"].items():
+            widget_count = 0
+            column_count = 0
+            self.logger.debug(f"Extracting columns from widgets for dashboard '{dashboard_name}'")
+
+            total_widgets_in_dashboard = len(dashboard.get("widgets", []))
+            self.logger.debug(f"Total widgets found: {total_widgets_in_dashboard}")
+
+            for widget_index, widget in enumerate(dashboard.get("widgets", []), start=1):
+                widget_count += 1
+                widget_id = widget.get("oid", "Unknown Widget")
+                widget_title = widget.get("title", "Unnamed Widget")
+
+                self.logger.debug(f"Processing widget {widget_index}/{total_widgets_in_dashboard}: '{widget_title}' (ID: {widget_id})")
+
+                for panel in widget.get("metadata", {}).get("panels", []):
+                    for item in panel.get("items", []):
+                        jaql = item.get("jaql", {})
+
+                        # Extract columns from 'context' (Formula-based columns)
+                        if "context" in jaql and isinstance(jaql["context"], dict):
+                            if not jaql["context"]:
+                                self.logger.info(f"Widget {widget_index}: 'context' is an empty dict. Skipping context extraction.")
+                                continue
+                            
+                            for _, value in jaql["context"].items():
+                                dim_value = value.get("dim", "Unknown.Table")
+                                table, column = dim_value.strip("[]").split(".", 1) if "." in dim_value else (dim_value.strip("[]"), "Unknown Column")
+
                                 dashboard_columns.append({
                                     "datamodel_name": datamodel_name,
-                                    "dashboard_name": dashboard["title"],
+                                    "dashboard_name": dashboard_name,
                                     "source": "widget",
-                                    "widget_id": widget["oid"],
-                                    "table": value.get("table", "Unknown Table"),
-                                    "column": value.get("column", "Unknown Column")
+                                    "widget_id": widget_id,
+                                    "table": table,
+                                    "column": column
                                 })
+                                column_count += 1
+
+                                self.logger.debug(f"Widget {widget_index}: Extracted from context (Formula) - Table: {table}, Column: {column}")
+
+                        # Extract columns from 'dim' (Regular columns)
                         else:
+                            dim_value = jaql.get("dim", "Unknown.Table")
+                            if not dim_value:
+                                self.logger.info(f"Widget {widget_index}: Missing 'dim' in jaql. Skipping item.")
+                                continue
+                            table, column = dim_value.strip("[]").split(".", 1) if "." in dim_value else (dim_value.strip("[]"), "Unknown Column")
+
                             dashboard_columns.append({
                                 "datamodel_name": datamodel_name,
-                                "dashboard_name": dashboard["title"],
+                                "dashboard_name": dashboard_name,
                                 "source": "widget",
-                                "widget_id": widget["oid"],
-                                "table": item["jaql"].get("table", "Unknown Table"),
-                                "column": item["jaql"].get("column", "Unknown Column")
+                                "widget_id": widget_id,
+                                "table": table,
+                                "column": column
                             })
+                            column_count += 1
+                            
+                            self.logger.debug(f"Widget {widget_index}: Extracted from regular source - Table: {table}, Column: {column}")
 
-        self.logger.info(f"Collected {len(dashboard_columns)} dashboard columns.")
+            total_widgets += widget_count
+            self.logger.info(f"Processed {widget_count} widgets and {filter_count} filters and extracted {column_count} columns for dashboard '{dashboard_name}'")
 
-        # Step 6: Identify used and unused columns
-        dashboard_columns_set = set((entry['table'], entry['column']) for entry in dashboard_columns)
+
+        self.logger.info(f"Total filters processed: {total_filters}")
+        self.logger.info(f"Total widgets processed: {total_widgets}")
+        self.logger.info(f"Total dashboard columns extracted: {len(dashboard_columns)}")
+
+        # Step 4: Identify used and unused columns
+        dashboard_columns_set = set()
+
+        for entry in dashboard_columns:
+            table = entry["table"]
+            column = entry["column"]
+
+            # Fix issue: Remove "(Calendar)" from dashboard columns only
+            if column.endswith(" (Calendar)"):
+                column = column.replace(" (Calendar)", "").strip()
+
+            dashboard_columns_set.add((table, column))
+
+        used_columns_count = 0
+        unused_columns_count = 0
 
         for entry in all_columns:
-            table_column_pair = (entry['table'], entry['column'])
-            entry['used'] = True if table_column_pair in dashboard_columns_set else False
+            table = entry["table"]
+            column = entry["column"]
 
-        used_columns_count = sum(1 for entry in all_columns if entry['used'])
-        unused_columns_count = len(all_columns) - used_columns_count
+            # Check against cleaned dashboard column names
+            entry['used'] = (table, column) in dashboard_columns_set
+
+            if entry['used']:
+                used_columns_count += 1
+            else:
+                unused_columns_count += 1
 
         self.logger.info(f"Total used columns: {used_columns_count}")
         self.logger.info(f"Total unused columns: {unused_columns_count}")
 
         return all_columns
+
 
     def get_all_dashboard_shares(self):
         """
@@ -1305,26 +1237,30 @@ class AccessManagement:
 
         # Return the result as a list of dictionaries
         return shared_list
+        
 
-
-
-    def create_schedule_build(self, days, hour, minute, datamodel_name, build_type="ACCUMULATE"):
+    def create_schedule_build(self, datamodel_name, build_type="ACCUMULATE", *, days=None, hour=None, minute=None, interval_days=None, interval_hours=None, interval_minutes=None):
         """
-        Method to create a schedule build in UTC with user-provided day, hour, and minute.
+        Method to create a schedule build for a DataModel.
+
+        Supports both cron-based schedules (e.g., every Monday at 9:00 UTC)
+        and interval-based schedules (e.g., every 2 days, 1 hour, 30 minutes).
 
         Parameters:
-            days (list): List of days to run the schedule in UTC. Example: ["MON", "WED", "FRI"] or ["*"] for all days.
-            hour (int): Hour of the day in UTC, in 24-hour format (0-23).
-            minute (int): Minute of the hour in UTC (0-59).
             datamodel_name (str): The name of the DataModel.
             build_type (str): Optional. Type of the build (e.g., "ACCUMULATE", "FULL", "SCHEMA_CHANGES"). Defaults to "ACCUMULATE".
+            days (list, optional): List of days for cron schedule. Eg.: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] or ["*"] for all days.
+            hour (int, optional): Hour in 24-hour format (UTC).
+            minute (int, optional): Minute of the hour (UTC).
+            interval_days (int, optional): Interval in days.
+            interval_hours (int, optional): Interval in hours.
+            interval_minutes (int, optional): Interval in minutes.
 
         Returns:
-            dict: Response from the API after creating the schedule.    
+            dict: API response or error.
         """
-        # Step 1: Fetch DataModel ID using datamodel_name
         self.logger.debug(f"Fetching DataModel ID for '{datamodel_name}'")
-        schema_url = "/api/v2/datamodels/schema"
+        schema_url = f"/api/v2/datamodels/schema?title={datamodel_name}"
         response = self.api_client.get(schema_url)
 
         if not response or response.status_code != 200:
@@ -1332,58 +1268,70 @@ class AccessManagement:
             return {"error": f"Failed to fetch DataModel schema for '{datamodel_name}'"}
 
         response_data = response.json()
-        datamodel_id = next((x.get("oid") for x in response_data if x.get("title") == datamodel_name), None)
-        if not datamodel_id:
+        if not response_data:
             self.logger.error(f"DataModel '{datamodel_name}' not found.")
             return {"error": f"DataModel '{datamodel_name}' not found"}
-
+        
+        # Extract DataModel ID
+        datamodel_id = response_data.get("oid")
         self.logger.info(f"DataModel ID for '{datamodel_name}' is {datamodel_id}")
 
-        # Step 2: Construct cronString
-        if days == ["*"]:
-            days_string = "0,1,2,3,4,5,6"  # Numeric representation for all days
-        else:
-            day_mapping = {
-                "SUN": "0", "MON": "1", "TUE": "2", "WED": "3",
-                "THU": "4", "FRI": "5", "SAT": "6"
+        # Determine schedule type
+        if interval_days is not None or interval_hours is not None or interval_minutes is not None:
+            self.logger.info("Creating interval-based schedule...")
+            days = interval_days or 0
+            hours = interval_hours or 0
+            minutes = interval_minutes or 0
+            interval_seconds = (days * 86400) + (hours * 3600) + (minutes * 60)
+
+            if interval_seconds <= 0:
+                self.logger.error("Interval must be greater than 0 seconds.")
+                return {"error": "Interval must be greater than 0 seconds."}
+
+            schedule_payload = {
+                "scheduleType": "Interval",
+                "buildType": build_type,
+                "intervalSeconds": interval_seconds
             }
-            days_string = ",".join([day_mapping[day] for day in days])
+        elif days and hour is not None and minute is not None:
+            self.logger.info("Creating cron-based schedule...")
+            if days == ["*"]:
+                days_string = "0,1,2,3,4,5,6"
+            else:
+                day_mapping = {
+                    "SUN": "0", "MON": "1", "TUE": "2", "WED": "3",
+                    "THU": "4", "FRI": "5", "SAT": "6"
+                }
+                days_string = ",".join([day_mapping[day] for day in days])
 
-        cron_string = f"{minute} {hour} * * {days_string}"
-        self.logger.debug(f"Generated cron string: {cron_string}")
+            cron_string = f"{minute} {hour} * * {days_string}"
+            self.logger.debug(f"Generated cron string: {cron_string}")
 
-
-        # Step 3: Prepare schedule payload
-        schedule_payload = {
-            "cronString": cron_string,
-            "buildType": build_type,
-            "daysOfWeek": days,
-            "hour": hour,
-            "minute": minute
-        }
+            schedule_payload = {
+                "cronString": cron_string,
+                "buildType": build_type,
+                "daysOfWeek": days,
+                "hour": hour,
+                "minute": minute
+            }
+        else:
+            self.logger.error("Invalid schedule configuration: Provide either interval or full cron config.")
+            return {"error": "Invalid schedule configuration: Provide either interval or full cron config."}
 
         self.logger.info("Creating schedule build with the following details:")
         self.logger.debug(schedule_payload)
 
-        # Step 4: Construct API endpoint and send request
         api_url = f"/api/v2/datamodels/{datamodel_id}/schedule"
         response = self.api_client.post(api_url, data=schedule_payload)
 
-        # Check for a successful response (either 200 or 201)
         if not response or response.status_code not in [200, 201]:
             self.logger.error(f"Failed to create schedule build. Response: {getattr(response, 'text', 'No response text')}")
             return {"error": "Failed to create schedule build."}
 
-        # Handle JSON parsing
         try:
-            response_data = response.json()  # Attempt to parse JSON response
+            response_data = response.json()
             self.logger.info(f"Schedule build created successfully. Response: {response_data}")
             return response_data
-        except AttributeError:
-            self.logger.warning("Response object does not support JSON parsing.")
-            return {"message": "Schedule build created successfully", "raw_response": str(response)}
-        except ValueError:
-            self.logger.warning("API response does not contain valid JSON. Returning raw text.")
+        except (AttributeError, ValueError):
+            self.logger.warning("Response does not contain valid JSON. Returning raw response.")
             return {"message": "Schedule build created successfully", "raw_response": getattr(response, 'text', 'No response text')}
-
-

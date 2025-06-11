@@ -1,3 +1,0 @@
-domain: ""    # Eample: example.com or 10.***.**.***
-is_ssl: true  # Whether to use SSL or not
-token: ""     # Your API token

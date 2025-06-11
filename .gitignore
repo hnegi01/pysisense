@@ -1,17 +1,27 @@
-# Ignore environment files
+# Python build artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+
+# Virtual environments
 .env
 pysisense_venv/
 
-# Ignore system files
-__pycache__/
+# macOS system files
 .DS_Store
-pysisense.egg-info/
 
-# Ignore CSV files
-*.csv
+# IDE/editor settings
+.vscode/
 
-# Ignore log files
+# PyPI/dist build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary files
 logs/*.log
 
-# Ignore YAML files
-*.yaml
+# Data files
+*.csv
