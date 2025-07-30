@@ -4,6 +4,7 @@ import urllib3
 import logging
 import pandas as pd
 from pandas import json_normalize
+import re
 from collections import defaultdict
 import os
 from .utils import convert_to_dataframe, export_to_csv as export_csv_util
@@ -23,7 +24,10 @@ class APIClient:
         self.config = self._load_config(config_file)
         
         # Get the domain or IP address from the configuration
-        self.domain = self.config['domain']
+        raw_domain = self.config['domain']
+        # Strip protocol, port, and trailing slash
+        cleaned = re.sub(r'^https?://', '', raw_domain).rstrip('/')
+        self.domain = cleaned.split(':')[0]  # Remove port if present
         
         # Determine if SSL is enabled based on the configuration, default is True (HTTPS)
         self.is_ssl = self.config.get('is_ssl', True)
@@ -51,9 +55,10 @@ class APIClient:
         # Initialize the logger
         self.logger = self._get_logger("APIClient", log_file_path, log_level)
 
-        if not self.is_ssl:
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            self.logger.warning("SSL verification is disabled. Avoid using this in production.")
+        # Always disable SSL certificate verification
+        self.verify = False
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        self.logger.warning("SSL verification is disabled. Avoid using this in production.")
 
 
     def _load_config(self, config_file):
@@ -199,15 +204,15 @@ class APIClient:
         try:
             # Perform the appropriate HTTP request based on the method
             if method == 'GET':
-                response = requests.get(url, headers=self.headers, params=params, verify=self.is_ssl)
+                response = requests.get(url, headers=self.headers, params=params, verify=self.verify)
             elif method == 'POST':
-                response = requests.post(url, headers=self.headers, json=data, verify=self.is_ssl)
+                response = requests.post(url, headers=self.headers, json=data, verify=self.verify)
             elif method == 'PUT':
-                response = requests.put(url, headers=self.headers, json=data, verify=self.is_ssl)
+                response = requests.put(url, headers=self.headers, json=data, verify=self.verify)
             elif method == 'PATCH':
-                response = requests.patch(url, headers=self.headers, json=data, verify=self.is_ssl)
+                response = requests.patch(url, headers=self.headers, json=data, verify=self.verify)
             elif method == 'DELETE':
-                response = requests.delete(url, headers=self.headers, verify=self.is_ssl)
+                response = requests.delete(url, headers=self.headers, verify=self.verify)
             else:
                 # Raise an error for unsupported HTTP methods
                 raise ValueError(f"Unsupported HTTP method: {method}")

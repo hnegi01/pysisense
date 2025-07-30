@@ -414,6 +414,8 @@ class Migration:
 
         # Step 3: Process each user and prepare the payload for the bulk endpoint
         for user in source_users:
+            if user["role"]["name"] == 'super':
+                continue  # Skip sysadmin users as they are not migrated
             user_data = {
                 "email": user["email"],
                 "firstName": user["firstName"],
